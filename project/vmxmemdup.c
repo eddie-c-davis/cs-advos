@@ -25,9 +25,8 @@
 #define FEATURE_CONTROL_MSR 0x3A
 #define FILEPATH "/usr/bin/perl"
 
-typedef unsigned char BOOL;
-typedef unsigned int  UINT;
-typedef unsigned long ULONG;
+typedef unsigned int  uint;
+typedef unsigned long ulong;
 
 static void save_registers(void){
     asm volatile("pushq %rcx\n"
@@ -81,9 +80,9 @@ static int do_vmx_check(void) {
     return vmx_is_on;
 }
 
-static ULONG get_day_time(void) {
+static ulong get_day_time(void) {
     struct timespec ts;
-    ULONG now;
+    ulong now;
 
     getnstimeofday(&ts);
     now = timespec_to_ns(&ts);
@@ -91,11 +90,11 @@ static ULONG get_day_time(void) {
     return now;
 }
 
-static ULONG get_clock_time(void) {
+static ulong get_clock_time(void) {
     return get_day_time();
     // TODO: Fix this later maybe...
 //    struct timespec ts;
-//    ULONG now;
+//    ulong now;
 //
 //    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
 //    now = timespec_to_ns(&ts);
@@ -103,8 +102,8 @@ static ULONG get_clock_time(void) {
 //    return now;
 }
 
-static ULONG load_file(const char *path, char *data) {
-    ULONG size = 0;
+static ulong load_file(const char *path, char *data) {
+    ulong size = 0;
 
     struct file *fp;
     struct inode *inode;
@@ -152,18 +151,40 @@ static ULONG load_file(const char *path, char *data) {
     return size;
 }
 
+//static void write_file(char* path, char* data) {
+//    struct file *fp;
+//    mm_segment_t fs;
+//
+//    fp = filp_open(path, O_RDWR | O_APPEND, 0644);
+//    if(IS_ERR(fp)) {
+//        printk("<vmxmemdup> Error opening file: '%s'\n", path);
+//    } else {
+//        fs = get_fs();
+//        set_fs(KERNEL_DS);
+//        fp->f_op->write(fp, data, strlen(data), &fp->f_pos);
+//        set_fs(fs);
+//        filp_close(fp, NULL);
+//    }
+//}
 
-
+static void write_pages(char* data, ulong pages, char chr) {
+    do {
+        data[pages*MY_PAGE_SIZE - 1] = chr;
+        pages--;
+    } while(pages > 0);
+}
 
 static int __init vmxmemdup_init(void) {
-    char *content = NULL;
+    char *data = NULL;
 
-    BOOL vmx_is_on = FALSE;
+    uint vmx_is_on = FALSE;
 
-    ULONG start_time = 0;
-    ULONG stop_time = 0;
-    ULONG read_time = 0;
-    ULONG file_size;
+    ulong time1 = 0;
+    ulong time2 = 0;
+    ulong rtime = 0;
+    ulong wtime = 0;
+    ulong fsize;
+    ulong pages;
 
     printk("<vmxmemdup> In vmxon\n");
     save_registers();
@@ -173,16 +194,32 @@ static int __init vmxmemdup_init(void) {
 
     if (vmx_is_on) {
         /* Start timer */
-        start_time = get_clock_time();
+        time1 = get_clock_time();
 
         /* Load a file */
-        file_size = load_file(FILEPATH, content);
+        fsize = load_file(FILEPATH, data);
 
-        /* Stop timer */
-        stop_time = get_clock_time();
-        read_time = stop_time - start_time;
+        if (fsize > 0 && data != NULL) {
+            /* Stop timer */
+            time2 = get_clock_time();
+            rtime = time2 - time1;
 
-        printk("<vmxmemdup> File of size %ld read in %ld ns\n", file_size, read_time);
+            pages = fsize / MY_PAGE_SIZE;
+
+            printk("<vmxmemdup> File of size %ld B, %ld pages, read in %ld ns\n", fsize, pages, rtime);
+
+            /* Restart timer for writing pages... */
+            time1 = get_clock_time();
+
+            write_pages(data, pages, '.');
+
+            /* Stop timer */
+            time2 = get_clock_time();
+            wtime = time2 - time1;
+
+            // Avoid memory leaks...
+            kfree(data);
+        }
     }
 
     restore_registers();
