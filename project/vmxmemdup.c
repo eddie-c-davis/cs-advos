@@ -3,10 +3,7 @@
 */
 #include <linux/module.h>/* Needed by all modules */
 #include <linux/kernel.h>/* Needed for KERN_INFO */
-//#include <linux/init.h>
-//#include <linux/module.h>
-//#include <linux/syscalls.h>
-//#include <linux/fcntl.h>
+#include <linux/delay.h>
 #include <linux/fs.h>    /* File functions */
 #include <linux/slab.h>  /* Mem functions */
 #include <linux/time.h>  /* Timer functions */
@@ -24,6 +21,10 @@
 #define CPUID_VMX_BIT 5
 #define FEATURE_CONTROL_MSR 0x3A
 #define FILEPATH "/usr/bin/perl"
+
+#define NUM_READS     2
+#define NUM_SECONDS   2
+#define KSM_THRESHOLD 0.5
 
 typedef unsigned int  uint;
 typedef unsigned long ulong;
@@ -174,17 +175,29 @@ static void write_pages(char* data, ulong pages, char chr) {
     } while(pages > 0);
 }
 
-static int __init vmxmemdup_init(void) {
-    char *data = NULL;
+static void free_data(char* data[]) {
+    uint i;
+    for (i = 0; i <= NUM_READS; i++) {
+        kfree(data[i]);
+    }
+}
 
+static int __init vmxmemdup_init(void) {
+    char *data[NUM_READS+1];
+
+    uint i;
     uint vmx_is_on = FALSE;
+    uint thresh_stat = 0;
 
     ulong time1 = 0;
     ulong time2 = 0;
     ulong rtime = 0;
     ulong wtime = 0;
+    ulong w2time = 0;
     ulong fsize;
     ulong pages;
+
+    float ratio = 0.0;
 
     printk("<vmxmemdup> In vmxon\n");
     save_registers();
@@ -197,9 +210,9 @@ static int __init vmxmemdup_init(void) {
         time1 = get_clock_time();
 
         /* Load a file */
-        fsize = load_file(FILEPATH, data);
+        fsize = load_file(FILEPATH, data[0]);
 
-        if (fsize > 0 && data != NULL) {
+        if (fsize > 0 && data[0] != NULL) {
             /* Stop timer */
             time2 = get_clock_time();
             rtime = time2 - time1;
@@ -211,20 +224,55 @@ static int __init vmxmemdup_init(void) {
             /* Restart timer for writing pages... */
             time1 = get_clock_time();
 
-            write_pages(data, pages, '.');
+            /* Write pages once... */
+            write_pages(data[0], pages, '.');
 
             /* Stop timer */
             time2 = get_clock_time();
             wtime = time2 - time1;
 
+            printk("<vmxmemdup> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
+
+            /* Load file NUM_READS more times */
+            for (i = 1; i <= NUM_READS; i++) {
+                fsize = load_file(FILEPATH, data[i]);
+            }
+
+            printk("<vmxmemdup> Read file '%s' %d more times\n", FILEPATH, NUM_READS);
+
+            /* Sleep my pretty... */
+            msleep(NUM_SECONDS * 1000);
+
+            printk("<vmxmemdup> Slept for %d seconds\n", NUM_SECONDS);
+
+            /* Restart timer for writing pages... */
+            time1 = get_clock_time();
+
+            /* Write pages again... */
+            write_pages(data[0], pages, '.');
+
+            /* Stop timer */
+            time2 = get_clock_time();
+            w2time = time2 - time1;
+
+            printk("<vmxmemdup> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
+
+            ratio = (float) w2time / (float) wtime;
+            thresh_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
+
+            printk("<vmxmemdup> Ratio = %g = %ld / %ld, Threshold = %g, Status = %d\n",
+                   ratio, w2time, wtime, KSM_THRESHOLD, thresh_stat);
+
             // Avoid memory leaks...
-            kfree(data);
+            free_data(data);
+
+            printk("<vmxmemdup> Freed %d data pointers\n", NUM_READS+1);
         }
     }
 
     restore_registers();
 
-    return 0;
+    return thresh_stat;
 }
 
 static void __exit vmxmemdup_exit(void) {
@@ -237,4 +285,3 @@ module_exit(vmxmemdup_exit);
 MODULE_AUTHOR("Eddie Davis <eddiedavis@boisestate.edu>");
 MODULE_DESCRIPTION("VMX Memory Duplication Detector");
 MODULE_LICENSE("GPL v2");
-
