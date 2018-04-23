@@ -2,4 +2,7 @@
 modules.order
 memdupe-user
 Module.symvers
+*.cmd
+*.ko
+*.o
 
