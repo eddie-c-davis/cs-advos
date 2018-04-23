@@ -35,11 +35,6 @@ static int virt_test(void) {
         }
 
         fclose(fp);
-        if (virt_on) {
-            printf("<memdupe> Hypervisor flag is set, KVM is on\n");
-        } else {
-            printf("<memdupe> Error: Hypervisor flag is NOT set, KVM is off\n");
-        }
     } else {
         printf("<memdupe> Error: Could not open file '/proc/cpuinfo'\n");
     }
@@ -65,15 +60,12 @@ static char *load_file(const char *path, ulong *fsize) {
     fp = fopen(path, "rb");
 
     if (fp != NULL) {
-        //printf("<memdupe> Opened file: '%s'\n", path);
-
         /* Get file size */
         fseek(fp, 0, SEEK_END);
         *fsize = ftell(fp);
         rewind(fp);
 
         // Allocate buffer...
-        //printf("<memdupe> Allocating data: %ld bytes\n", *fsize);
         data = (char *) malloc(*fsize + 1);
 
         if (data != NULL) {
@@ -87,7 +79,6 @@ static char *load_file(const char *path, ulong *fsize) {
 
         // Close file
         fclose(fp);
-        //printf("<memdupe> Closed file: '%s'\n", path);
     } else {
         printf("<memdupe> Error opening file: '%s'\n", path);
         *fsize = 0;
@@ -124,6 +115,22 @@ static ulong write_pages(char** data, ulong pages, char *msg) {
     return (time2 - time1);
 }
 
+static char *read_pages(char** data, ulong pages) {
+    char *buffer = NULL;
+    ulong index = 0;
+
+    buffer = (char *) malloc(sizeof(char) * pages);
+    memset(buffer, '.', sizeof(char) * pages);
+
+    do {
+        buffer[index] = (*data)[pages * MY_PAGE_SIZE - 1];
+        index++;
+        pages--;
+    } while (pages > 0);
+
+    return buffer;
+}
+
 static void free_data(char** data0, char **data1, char **data2) {
     free(*data0);
     free(*data1);
@@ -132,6 +139,7 @@ static void free_data(char** data0, char **data1, char **data2) {
 
 static int memdupe_init(void) {
     char *data0, *data1, *data2;
+    char *msg;
 
     uint vmx_on = FALSE;
     uint vm_stat = 0;
@@ -144,15 +152,18 @@ static int memdupe_init(void) {
 
     float ratio = 0.0;
 
-    printf("<memdupe> In memdupe_init\n");
-
     /* Test virtualization */
-    vmx_on = TRUE; //virt_test();
+    vmx_on = virt_test();
+    if (vmx_on) {
+        printf("<memdupe> Running memdupe_init in guest mode\n");
+    } else {
+        printf("<memdupe> Running memdupe_init in host mode\n");
+    }
 
     /* Get CPL flag */
     cpl_flag = cpl_check();
 
-    if (vmx_on && cpl_flag == CPL_USER) {
+    if (cpl_flag == CPL_USER) {
         /* Load a file */
         data0 = load_file(FILEPATH, &fsize);
 

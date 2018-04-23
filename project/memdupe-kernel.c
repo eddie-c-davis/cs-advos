@@ -8,21 +8,6 @@
 
 #include "memdupe.h"
 
-static void save_registers(void) {
-    asm volatile("pushq %rcx\n"
-            "pushq %rdx\n"
-            "pushq %rax\n"
-            "pushq %rbx\n"
-    );
-}
-
-static void restore_registers(void) {
-    asm volatile("popq %rbx\n"
-            "popq %rax\n"
-            "popq %rdx\n"
-            "popq %rcx\n");
-}
-
 static int cpl_check(void) {
     uint csr, mask, cpl;
     asm("movl %%cs,%0" : "=r" (csr));
@@ -43,14 +28,18 @@ static int virt_test(void) {
     int msr3a_value = 0;
     int vmx_on = FALSE;
 
+    asm volatile("pushq %rcx\n"
+            "pushq %rdx\n"
+            "pushq %rax\n"
+            "pushq %rbx\n"
+    );
+
     asm volatile("cpuid\n\t"
     :"=c"(cpuid_ecx)
     :"a"(cpuid_leaf)
     :"%rbx","%rdx");
 
     if((cpuid_ecx>>CPUID_VMX_BIT)&1) {
-        printk("<memdupe> VMX supported CPU.\n");
-
         asm volatile("rdmsr\n"
             :"=a"(msr3a_value)
             :"c"(FEATURE_CONTROL_MSR)
@@ -59,17 +48,16 @@ static int virt_test(void) {
 
         if(msr3a_value&1){
             if((msr3a_value>>2)&1){
-                printk("<memdupe> MSR 0x3A:Lock bit is on.VMXON bit is on.OK\n");
                 vmx_on = TRUE;
             } else {
-                printk("<memdupe> MSR 0x3A:Lock bit is on.VMXONbit is off.Cannot do vmxon\n");
             }
-        } else {
-            printk("<memdupe> MSR 0x3A: Lock bit is not on. Not doing anything\n");
         }
-    } else {
-        printk("<memdupe> VMX not supported by CPU.\n");
     }
+
+    asm volatile("popq %rbx\n"
+            "popq %rax\n"
+            "popq %rdx\n"
+            "popq %rcx\n");
 
     return vmx_on;
 }
@@ -94,14 +82,11 @@ static char *load_file(const char *path, ulong *fsize) {
     fp = filp_open(path, O_RDONLY, 0);
 
     if (fp != NULL) {
-        //printk("<memdupe> Opened file: '%s'\n", path);
-
         /* Get file size */
         inode = fp->f_path.dentry->d_inode;
         *fsize = inode->i_size;
 
         // Allocate buffer...
-        //printk("<memdupe> Allocating data: %ld bytes\n", *fsize);
         data = (char *) kmalloc(*fsize + 1, GFP_ATOMIC);
 
         if (data != NULL) {
@@ -122,7 +107,6 @@ static char *load_file(const char *path, ulong *fsize) {
 
         // Close file
         filp_close(fp, NULL);
-        //printk("<memdupe> Closed file: '%s'\n", path);
     } else {
         printk("<memdupe> Error opening file: '%s'\n", path);
         *fsize = 0;
@@ -159,6 +143,22 @@ static ulong write_pages(char** data, ulong pages, char *msg) {
     return (time2 - time1);
 }
 
+static char *read_pages(char** data, ulong pages) {
+    char *buffer = NULL;
+    ulong index = 0;
+
+    buffer = (char *) kmalloc(sizeof(char) * pages, GFP_ATOMIC);
+    memset(buffer, '.', sizeof(char) * pages);
+
+    do {
+        buffer[index] = (*data)[pages * MY_PAGE_SIZE - 1];
+        index++;
+        pages--;
+    } while (pages > 0);
+
+    return buffer;
+}
+
 static void free_data(char** data0, char **data1, char **data2) {
     kfree(*data0);
     kfree(*data1);
@@ -178,16 +178,12 @@ static int __init memdupe_init(void) {
     ulong w2time = 0;
     ulong ratio = 0;
 
-    printk("<memdupe> In memdupe_init\n");
-    save_registers();
-
-    /* Test virtualization */
-    vmx_on = virt_test();
-
     /* Check CPL flag */
     cpl_flag = cpl_check();
 
-    if (vmx_on && cpl_flag == CPL_KERN) {
+    if (cpl_flag == CPL_KERN) {
+        printk("<memdupe> Running memdupe_init in kernel mode\n");
+
         /* Load a file */
         data0 = load_file(FILEPATH, &fsize);
 
@@ -223,8 +219,6 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Freed data pointers\n");
         }
     }
-
-    restore_registers();
 
     return vm_stat;
 }

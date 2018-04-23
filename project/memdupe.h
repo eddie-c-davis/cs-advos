@@ -36,6 +36,7 @@ static int cpl_check(void);
 static ulong get_clock_time(void);
 static char *load_file(const char *path, ulong *fsize);
 static ulong write_pages(char** data, ulong pages, char *msg);
+static char *read_pages(char** data, ulong pages);
 static void free_data(char** data0, char **data1, char **data2);
 
 #endif
