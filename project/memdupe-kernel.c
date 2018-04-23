@@ -85,7 +85,7 @@ static ulong get_clock_time(void) {
 }
 
 static ulong load_file(const char *path, char *data) {
-    ulong size = 0;
+    ulong fsize = 0;
 
     struct file *fp;
     struct inode *inode;
@@ -97,12 +97,12 @@ static ulong load_file(const char *path, char *data) {
     if (fp != NULL) {
         printk("<memdupe> Opened file: '%s'\n", path);
 
-        //inode = fp->f_dentry->d_inode;
+        /* Get file size */
         inode = fp->f_path.dentry->d_inode;
-        size = inode->i_size;
+        fsize = inode->i_size;
 
         // Allocate buffer...
-        data = (char *) kmalloc(size + 1, GFP_ATOMIC);
+        data = (char *) kmalloc(fsize + 1, GFP_ATOMIC);
 
         if (data != NULL) {
             printk("<memdupe> Reading file: '%s'\n", path);
@@ -110,14 +110,14 @@ static ulong load_file(const char *path, char *data) {
             fs = get_fs();
             set_fs(KERNEL_DS);
 
-            fp->f_op->read(fp, data, size, &(fp->f_pos));
-            data[size] = '\0';  // Terminate string
+            fp->f_op->read(fp, data, fsize, &(fp->f_pos));
+            data[fsize] = '\0';  // Terminate string
 
             // Restore segment descriptor
             set_fs(fs);
         } else {
-            printk("<memdupe> Error allocating data: %ld bytes\n", size);
-            size = 0;
+            printk("<memdupe> Error allocating data: %ld bytes\n", fsize);
+            fsize = 0;
         }
 
         // Close file
@@ -127,7 +127,7 @@ static ulong load_file(const char *path, char *data) {
         printk("<memdupe> Error opening file: '%s'\n", path);
     }
 
-    return size;
+    return fsize;
 }
 
 static void write_pages(char* data, ulong pages, char chr) {

@@ -58,49 +58,41 @@ static ulong get_clock_time(void) {
 }
 
 static ulong load_file(const char *path, char *data) {
-    ulong size = 0;
+    ulong fsize = 0;
 
-//    struct file *fp;
-//    struct inode *inode;
-//    mm_segment_t fs;
-//
-//    // Open file
-//    fp = filp_open(path, O_RDONLY, 0);
-//
-//    if (fp != NULL) {
-//        printk("<memdupe> Opened file: '%s'\n", path);
-//
-//        //inode = fp->f_dentry->d_inode;
-//        inode = fp->f_path.dentry->d_inode;
-//        size = inode->i_size;
-//
-//        // Allocate buffer...
-//        data = (char *) kmalloc(size + 1, GFP_ATOMIC);
-//
-//        if (data != NULL) {
-//            printk("<memdupe> Reading file: '%s'\n", path);
-//
-//            fs = get_fs();
-//            set_fs(KERNEL_DS);
-//
-//            fp->f_op->read(fp, data, size, &(fp->f_pos));
-//            data[size] = '\0';  // Terminate string
-//
-//            // Restore segment descriptor
-//            set_fs(fs);
-//        } else {
-//            printk("<memdupe> Error allocating data: %ld bytes\n", size);
-//            size = 0;
-//        }
-//
-//        // Close file
-//        filp_close(fp, NULL);
-//        printk("<memdupe> Closed file: '%s'\n", path);
-//    } else {
-//        printk("<memdupe> Error opening file: '%s'\n", path);
-//    }
+    FILE *fp;
 
-    return size;
+    // Open file
+    fp = fopen(path, "rb");
+
+    if (fp != NULL) {
+        printf("<memdupe> Opened file: '%s'\n", path);
+
+        /* Get file size */
+        fseek(fp, 0, SEEK_END);
+        fsize = ftell(fp);
+        rewind(fp);
+
+        // Allocate buffer...
+        data = (char *) malloc(fsize + 1);
+
+        if (data != NULL) {
+            printf("<memdupe> Reading file: '%s'\n", path);
+            fread(data, fsize, 1, fp);
+            data[fsize] = '\0';  // Terminate string
+        } else {
+            printf("<memdupe> Error allocating data: %ld bytes\n", fsize);
+            fsize = 0;
+        }
+
+        // Close file
+        fclose(fp);
+        printf("<memdupe> Closed file: '%s'\n", path);
+    } else {
+        printf("<memdupe> Error opening file: '%s'\n", path);
+    }
+
+    return fsize;
 }
 
 static void write_pages(char* data, ulong pages, char chr) {
