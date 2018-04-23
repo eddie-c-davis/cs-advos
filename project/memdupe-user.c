@@ -173,6 +173,11 @@ static int memdupe_init(void) {
             printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, VM_Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
+            if (vm_stat) {
+                /* KSM tells us we are running on a VM, create channel to other VM... */
+                printf("data0 = %p, data1 = %p, data2 = %p", data0, data1, data2);
+            }
+
             // Avoid memory leaks...
             free_data(&data0, &data1, &data2);
             printf("<memdupe> Freed data pointers\n");
