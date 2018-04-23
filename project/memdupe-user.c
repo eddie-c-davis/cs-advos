@@ -65,7 +65,7 @@ static char *load_file(const char *path, ulong *fsize) {
     fp = fopen(path, "rb");
 
     if (fp != NULL) {
-        printf("<memdupe> Opened file: '%s'\n", path);
+        //printf("<memdupe> Opened file: '%s'\n", path);
 
         /* Get file size */
         fseek(fp, 0, SEEK_END);
@@ -73,7 +73,7 @@ static char *load_file(const char *path, ulong *fsize) {
         rewind(fp);
 
         // Allocate buffer...
-        printf("<memdupe> Allocating data: %ld bytes\n", *fsize);
+        //printf("<memdupe> Allocating data: %ld bytes\n", *fsize);
         data = (char *) malloc(*fsize + 1);
 
         if (data != NULL) {
@@ -87,7 +87,7 @@ static char *load_file(const char *path, ulong *fsize) {
 
         // Close file
         fclose(fp);
-        printf("<memdupe> Closed file: '%s'\n", path);
+        //printf("<memdupe> Closed file: '%s'\n", path);
     } else {
         printf("<memdupe> Error opening file: '%s'\n", path);
         *fsize = 0;

@@ -94,14 +94,14 @@ static char *load_file(const char *path, ulong *fsize) {
     fp = filp_open(path, O_RDONLY, 0);
 
     if (fp != NULL) {
-        printk("<memdupe> Opened file: '%s'\n", path);
+        //printk("<memdupe> Opened file: '%s'\n", path);
 
         /* Get file size */
         inode = fp->f_path.dentry->d_inode;
         *fsize = inode->i_size;
 
         // Allocate buffer...
-        printk("<memdupe> Allocating data: %ld bytes\n", *fsize);
+        //printk("<memdupe> Allocating data: %ld bytes\n", *fsize);
         data = (char *) kmalloc(*fsize + 1, GFP_ATOMIC);
 
         if (data != NULL) {
@@ -122,7 +122,7 @@ static char *load_file(const char *path, ulong *fsize) {
 
         // Close file
         filp_close(fp, NULL);
-        printk("<memdupe> Closed file: '%s'\n", path);
+        //printk("<memdupe> Closed file: '%s'\n", path);
     } else {
         printk("<memdupe> Error opening file: '%s'\n", path);
         *fsize = 0;
