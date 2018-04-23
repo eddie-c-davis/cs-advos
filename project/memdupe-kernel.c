@@ -84,9 +84,8 @@ static ulong get_clock_time(void) {
     return now;
 }
 
-static ulong load_file(const char *path, char *data) {
-    ulong fsize = 0;
-
+static char *load_file(const char *path, ulong *fsize) {
+    char *data;
     struct file *fp;
     struct inode *inode;
     mm_segment_t fs;
@@ -99,10 +98,11 @@ static ulong load_file(const char *path, char *data) {
 
         /* Get file size */
         inode = fp->f_path.dentry->d_inode;
-        fsize = inode->i_size;
+        *fsize = inode->i_size;
 
         // Allocate buffer...
-        data = (char *) kmalloc(fsize + 1, GFP_ATOMIC);
+        printk("<memdupe> Allocating data: %ld bytes\n", *fsize);
+        data = (char *) kmalloc(*fsize + 1, GFP_ATOMIC);
 
         if (data != NULL) {
             printk("<memdupe> Reading file: '%s'\n", path);
@@ -110,14 +110,14 @@ static ulong load_file(const char *path, char *data) {
             fs = get_fs();
             set_fs(KERNEL_DS);
 
-            fp->f_op->read(fp, data, fsize, &(fp->f_pos));
-            data[fsize] = '\0';  // Terminate string
+            fp->f_op->read(fp, data, *fsize, &(fp->f_pos));
+            data[*fsize] = '\0';  // Terminate string
 
             // Restore segment descriptor
             set_fs(fs);
         } else {
-            printk("<memdupe> Error allocating data: %ld bytes\n", fsize);
-            fsize = 0;
+            printk("<memdupe> Error allocating data: %ld bytes\n", *fsize);
+            *fsize = 0;
         }
 
         // Close file
@@ -125,29 +125,28 @@ static ulong load_file(const char *path, char *data) {
         printk("<memdupe> Closed file: '%s'\n", path);
     } else {
         printk("<memdupe> Error opening file: '%s'\n", path);
+        *fsize = 0;
     }
 
-    return fsize;
+    return data;
 }
 
-static void write_pages(char* data, ulong pages, char chr) {
+static void write_pages(char** data, ulong pages, char chr) {
     do {
-        data[pages*MY_PAGE_SIZE - 1] = chr;
+        (*data)[pages * MY_PAGE_SIZE - 1] = chr;
         pages--;
-    } while(pages > 0);
+    } while (pages > 0);
 }
 
-static void free_data(char* data[]) {
-    uint i;
-    for (i = 0; i <= NUM_READS; i++) {
-        kfree(data[i]);
-    }
+static void free_data(char** data0, char **data1, char **data2) {
+    kfree(*data0);
+    kfree(*data1);
+    kfree(*data2);
 }
 
 static int __init memdupe_init(void) {
-    char *data[NUM_READS+1];
+    char *data0, *data1, *data2;
 
-    uint i;
     uint vmx_on = FALSE;
     uint thresh_stat = 0;
     uint cpl_flag = 0;
@@ -176,9 +175,9 @@ static int __init memdupe_init(void) {
         time1 = get_clock_time();
 
         /* Load a file */
-        fsize = load_file(FILEPATH, data[0]);
+        data0 = load_file(FILEPATH, &fsize);
 
-        if (fsize > 0 && data[0] != NULL) {
+        if (fsize > 0 && data0 != NULL) {
             /* Stop timer */
             time2 = get_clock_time();
             rtime = time2 - time1;
@@ -191,7 +190,7 @@ static int __init memdupe_init(void) {
             time1 = get_clock_time();
 
             /* Write pages once... */
-            write_pages(data[0], pages, '.');
+            write_pages(&data0, pages, '.');
 
             /* Stop timer */
             time2 = get_clock_time();
@@ -199,14 +198,13 @@ static int __init memdupe_init(void) {
 
             printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
-            /* Load file NUM_READS more times */
-            for (i = 1; i <= NUM_READS; i++) {
-                fsize = load_file(FILEPATH, data[i]);
-            }
+            /* Load file 2 more times */
+            data1 = load_file(FILEPATH, &fsize);
+            data2 = load_file(FILEPATH, &fsize);
 
-            printk("<memdupe> Read file '%s' %d more times\n", FILEPATH, NUM_READS);
+            printk("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
 
-            /* Sleep my pretty... */
+            /* Sleep... */
             msleep(NUM_SECONDS * 1000);
 
             printk("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
@@ -215,7 +213,7 @@ static int __init memdupe_init(void) {
             time1 = get_clock_time();
 
             /* Write pages again... */
-            write_pages(data[0], pages, '.');
+            write_pages(&data0, pages, '.');
 
             /* Stop timer */
             time2 = get_clock_time();
@@ -230,9 +228,9 @@ static int __init memdupe_init(void) {
                    ratio, w2time, wtime, KSM_THRESHOLD, thresh_stat);
 
             // Avoid memory leaks...
-            free_data(data);
+            free_data(&data0, &data1, &data2);
 
-            printk("<memdupe> Freed %d data pointers\n", NUM_READS+1);
+            printk("<memdupe> Freed data pointers\n");
         }
     }
 
