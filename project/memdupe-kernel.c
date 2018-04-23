@@ -131,20 +131,30 @@ static char *load_file(const char *path, ulong *fsize) {
     return data;
 }
 
-static ulong write_pages(char** data, ulong pages, char chr) {
+static ulong write_pages(char** data, ulong pages, char *msg) {
+    ulong index = 0;
     ulong time1 = 0;
     ulong time2 = 0;
+
+    char *buffer;
+
+    buffer = (char *) kmalloc(sizeof(char) * pages, GFP_ATOMIC);
+    memset(buffer, '.', sizeof(char) * pages);
+    strcpy(buffer, msg);
 
     /* Start timer for writing pages... */
     time1 = get_clock_time();
 
     do {
-        (*data)[pages * MY_PAGE_SIZE - 1] = chr;
+        (*data)[pages * MY_PAGE_SIZE - 1] = buffer[index];
+        index++;
         pages--;
     } while (pages > 0);
 
     /* Stop timer */
     time2 = get_clock_time();
+
+    kfree(buffer);
 
     return (time2 - time1);
 }
@@ -186,7 +196,7 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
             /* Write pages once... */
-            wtime = write_pages(&data0, pages, '.');
+            wtime = write_pages(&data0, pages, MESSAGE);
             printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
@@ -199,7 +209,7 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
 
             /* Write pages again... */
-            w2time = write_pages(&data0, pages, '.');
+            w2time = write_pages(&data0, pages, MESSAGE);
             printk("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
 
             ratio = w2time / wtime;

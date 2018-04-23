@@ -96,20 +96,30 @@ static char *load_file(const char *path, ulong *fsize) {
     return data;
 }
 
-static ulong write_pages(char** data, ulong pages, char chr) {
+static ulong write_pages(char** data, ulong pages, char *msg) {
+    ulong index = 0;
     ulong time1 = 0;
     ulong time2 = 0;
+
+    char *buffer;
+
+    buffer = (char *) malloc(sizeof(char) * pages);
+    memset(buffer, '.', sizeof(char) * pages);
+    strcpy(buffer, msg);
 
     /* Start timer for writing pages... */
     time1 = get_clock_time();
 
     do {
-        (*data)[pages * MY_PAGE_SIZE - 1] = chr;
+        (*data)[pages * MY_PAGE_SIZE - 1] = buffer[index];
+        index++;
         pages--;
     } while (pages > 0);
 
     /* Stop timer */
     time2 = get_clock_time();
+
+    free(buffer);
 
     return (time2 - time1);
 }
@@ -151,8 +161,8 @@ static int memdupe_init(void) {
             printf("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
             /* Write pages once... */
-            wtime = write_pages(&data0, pages, '.');
-            printf("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
+            wtime = write_pages(&data0, pages, MESSAGE);
+            printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
             data1 = load_file(FILEPATH, &fsize);
@@ -168,8 +178,8 @@ static int memdupe_init(void) {
             fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             /* Write pages again... */
-            w2time = write_pages(&data0, pages, '.');
-            printf("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
+            w2time = write_pages(&data0, pages, MESSAGE);
+            printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
 
             fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 

@@ -25,6 +25,8 @@
 #define CPL_KERN 0
 #define CPL_USER 3
 
+#define MESSAGE "Here is the message to be sent through the covert channel"
+
 typedef unsigned int  uint;
 typedef unsigned long ulong;
 
@@ -33,7 +35,7 @@ static int cpl_check(void);
 
 static ulong get_clock_time(void);
 static char *load_file(const char *path, ulong *fsize);
-static ulong write_pages(char** data, ulong pages, char chr);
+static ulong write_pages(char** data, ulong pages, char *msg);
 static void free_data(char** data0, char **data1, char **data2);
 
 #endif
