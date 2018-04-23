@@ -167,8 +167,8 @@ static void free_data(char** data0, char **data1, char **data2) {
 
 static int __init memdupe_init(void) {
     char *data0, *data1, *data2;
+    char *msg;
 
-    uint vmx_on = FALSE;
     uint vm_stat = 0;
     uint cpl_flag = 0;
 
@@ -213,6 +213,15 @@ static int __init memdupe_init(void) {
 
             printk("<memdupe> Ratio = %ld = %ld / %ld, Threshold = %d, VM_Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
+
+            if (vm_stat) {
+                /* KSM tells us we are running on a VM, create channel to other VM... */
+                msg = read_pages(&data0, pages);
+                printk("<memdupe> Read message '%s' from covert channel\n", msg);
+                kfree(msg);
+            } else {
+                printk("<memdupe> Memory deduplication did not occur\n");
+            }
 
             // Avoid memory leaks...
             free_data(&data0, &data1, &data2);

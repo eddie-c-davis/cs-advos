@@ -202,6 +202,11 @@ static int memdupe_init(void) {
 
             if (vm_stat) {
                 /* KSM tells us we are running on a VM, create channel to other VM... */
+                msg = read_pages(&data0, pages);
+                printf("<memdupe> Read message '%s' from covert channel\n", msg);
+                free(msg);
+            } else {
+                printf("<memdupe> Memory deduplication did not occur\n");
             }
 
             // Avoid memory leaks...
