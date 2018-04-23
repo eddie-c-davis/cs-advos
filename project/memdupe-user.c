@@ -174,9 +174,9 @@ static int memdupe_init(void) {
             fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             ratio = (float) w2time / (float) wtime;
-            vm_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
+            vm_stat = (ratio > (float) KSM_THRESHOLD) ? TRUE : FALSE;
 
-            printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, VM_Status = %d\n",
+            printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
             if (vm_stat) {

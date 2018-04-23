@@ -20,7 +20,7 @@
 
 #define NUM_READS     2
 #define NUM_SECONDS   3
-#define KSM_THRESHOLD 2.0
+#define KSM_THRESHOLD 2
 
 #define CPL_KERN 0
 #define CPL_USER 3

@@ -166,8 +166,7 @@ static int __init memdupe_init(void) {
     ulong pages;
     ulong wtime = 0;
     ulong w2time = 0;
-
-    float ratio = 0.0;
+    ulong ratio = 0;
 
     printk("<memdupe> In memdupe_init\n");
     save_registers();
@@ -203,10 +202,10 @@ static int __init memdupe_init(void) {
             w2time = write_pages(&data0, pages, '.');
             printk("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
 
-            ratio = (float) w2time / (float) wtime;
+            ratio = w2time / wtime;
             vm_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
 
-            printk("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, VM_Status = %d\n",
+            printk("<memdupe> Ratio = %ld = %ld / %ld, Threshold = %d, VM_Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
             // Avoid memory leaks...
