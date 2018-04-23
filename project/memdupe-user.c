@@ -96,7 +96,10 @@ static ulong write_pages(char** data, ulong pages, char *msg) {
 
     buffer = (char *) malloc(sizeof(char) * pages);
     memset(buffer, '.', sizeof(char) * pages);
-    strcpy(buffer, msg);
+
+    if (strlen(msg) > 0) {
+        strcpy(buffer, msg);
+    }
 
     /* Start timer for writing pages... */
     time1 = get_clock_time();
@@ -172,7 +175,7 @@ static int memdupe_init(void) {
             printf("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
             /* Write pages once... */
-            wtime = write_pages(&data0, pages, MESSAGE);
+            wtime = write_pages(&data0, pages, "");
             printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
@@ -201,10 +204,14 @@ static int memdupe_init(void) {
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
             if (vm_stat) {
-                /* KSM tells us we are running on a VM, create channel to other VM... */
-                msg = read_pages(&data0, pages);
-                printf("<memdupe> Read message '%s' from covert channel\n", msg);
-                free(msg);
+                if (_vmrole == RECEIVER) {
+                    /* KSM tells us we are running on a VM, create channel to other VM... */
+                    msg = read_pages(&data0, pages);
+                    printf("<memdupe> Read message '%s' from covert channel\n", msg);
+                    free(msg);
+                } else {
+                    printf("<memdupe> Wrote message '%s' into covert channel\n", MESSAGE);
+                }
             } else {
                 printf("<memdupe> Memory deduplication did not occur\n");
             }
@@ -234,7 +241,7 @@ int main(int argc, char **argv) {
     if (argc > 1) {
         _vmrole = atoi(argv[1]);
     } else {
-        _vmrole = SENDER;
+        _vmrole = 0;
     }
 
     status = memdupe_init();

@@ -25,10 +25,10 @@
 #define CPL_KERN 0
 #define CPL_USER 3
 
-#define MESSAGE "Here is the message to be sent through the covert channel"
+#define MESSAGE "Covert channel message!"
 
-#define SENDER   0
-#define RECEIVER 1
+#define SENDER   1
+#define RECEIVER 2
 
 typedef unsigned int  uint;
 typedef unsigned long ulong;
