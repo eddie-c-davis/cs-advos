@@ -4,7 +4,7 @@
 #include <linux/fs.h>       /* File functions */
 #include <linux/slab.h>     /* Mem functions */
 #include <linux/time.h>     /* Timer functions */
-#include <asm/uaccess.h>    /* Needed by segment descriptors */
+#include <linux/uaccess.h>  /* Needed by segment descriptors */
 
 #include "memdupe.h"
 
