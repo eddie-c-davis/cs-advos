@@ -1,7 +1,7 @@
-obj-m += vmxmemdup.o
+obj-m += memdupe-kernel.o
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) modules
-	#gcc cpluser.c -g -o cpluser
+	gcc memdupe-user.c -g -o memdupe-user
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-	#rm cpluser
+	rm -f memdupe-user

@@ -1,35 +1,14 @@
-/*
-* vmxmemdup.c - Detect memory duplication using KSM in KVM.
-*/
 #include <linux/module.h>/* Needed by all modules */
 #include <linux/kernel.h>/* Needed for KERN_INFO */
-#include <linux/delay.h>
-#include <linux/fs.h>    /* File functions */
-#include <linux/slab.h>  /* Mem functions */
-#include <linux/time.h>  /* Timer functions */
-#include <asm/uaccess.h>   // Needed by segment descriptors
+#include <linux/delay.h>    /* Sleep function */
+#include <linux/fs.h>       /* File functions */
+#include <linux/slab.h>     /* Mem functions */
+#include <linux/time.h>     /* Timer functions */
+#include <asm/uaccess.h>    /* Needed by segment descriptors */
 
-//EXPORT_SYMBOL_GPL(show_regs);
+#include "memdupe.h"
 
-#ifndef TRUE
-#define TRUE  1
-#define FALSE 0
-#endif
-
-#define MY_PAGE_SIZE 4096
-
-#define CPUID_VMX_BIT 5
-#define FEATURE_CONTROL_MSR 0x3A
-#define FILEPATH "/usr/bin/perl"
-
-#define NUM_READS     2
-#define NUM_SECONDS   2
-#define KSM_THRESHOLD 0.5
-
-typedef unsigned int  uint;
-typedef unsigned long ulong;
-
-static void save_registers(void){
+static void save_registers(void) {
     asm volatile("pushq %rcx\n"
             "pushq %rdx\n"
             "pushq %rax\n"
@@ -37,18 +16,32 @@ static void save_registers(void){
     );
 }
 
-static void restore_registers(void){
+static void restore_registers(void) {
     asm volatile("popq %rbx\n"
             "popq %rax\n"
             "popq %rdx\n"
             "popq %rcx\n");
 }
 
-static int do_vmx_check(void) {
+static int cpl_check(void) {
+    uint csr, mask, cpl;
+    asm("movl %%cs,%0" : "=r" (csr));
+
+    mask = (1 << 2) - 1;
+    cpl = csr & mask;
+
+    if (cpl != CPL_KERN) {
+        printk("<memdupe> Error: not running in kernel mode\n");
+    }
+
+    return cpl;
+}
+
+static int virt_test(void) {
     int cpuid_leaf = 1;
     int cpuid_ecx  = 0;
     int msr3a_value = 0;
-    int vmx_is_on = FALSE;
+    int vmx_on = FALSE;
 
     asm volatile("cpuid\n\t"
     :"=c"(cpuid_ecx)
@@ -56,7 +49,7 @@ static int do_vmx_check(void) {
     :"%rbx","%rdx");
 
     if((cpuid_ecx>>CPUID_VMX_BIT)&1) {
-        printk("<vmxmemdup> VMX supported CPU.\n");
+        printk("<memdupe> VMX supported CPU.\n");
 
         asm volatile("rdmsr\n"
             :"=a"(msr3a_value)
@@ -66,22 +59,22 @@ static int do_vmx_check(void) {
 
         if(msr3a_value&1){
             if((msr3a_value>>2)&1){
-                printk("<vmxmemdup> MSR 0x3A:Lock bit is on.VMXON bit is on.OK\n");
-                vmx_is_on = TRUE;
+                printk("<memdupe> MSR 0x3A:Lock bit is on.VMXON bit is on.OK\n");
+                vmx_on = TRUE;
             } else {
-                printk("<vmxmemdup> MSR 0x3A:Lock bit is on.VMXONbit is off.Cannot do vmxon\n");
+                printk("<memdupe> MSR 0x3A:Lock bit is on.VMXONbit is off.Cannot do vmxon\n");
             }
         } else {
-            printk("<vmxmemdup> MSR 0x3A: Lock bit is not on. Not doing anything\n");
+            printk("<memdupe> MSR 0x3A: Lock bit is not on. Not doing anything\n");
         }
     } else {
-        printk("<vmxmemdup> VMX not supported by CPU.\n");
+        printk("<memdupe> VMX not supported by CPU.\n");
     }
 
-    return vmx_is_on;
+    return vmx_on;
 }
 
-static ulong get_day_time(void) {
+static ulong get_clock_time(void) {
     struct timespec ts;
     ulong now;
 
@@ -89,18 +82,6 @@ static ulong get_day_time(void) {
     now = timespec_to_ns(&ts);
 
     return now;
-}
-
-static ulong get_clock_time(void) {
-    return get_day_time();
-    // TODO: Fix this later maybe...
-//    struct timespec ts;
-//    ulong now;
-//
-//    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
-//    now = timespec_to_ns(&ts);
-//
-//    return now;
 }
 
 static ulong load_file(const char *path, char *data) {
@@ -111,12 +92,10 @@ static ulong load_file(const char *path, char *data) {
     mm_segment_t fs;
 
     // Open file
-    //fd = sys_open(path, O_RDONLY, 0);
     fp = filp_open(path, O_RDONLY, 0);
 
-    //if (fd >= 0) {
     if (fp != NULL) {
-        printk("<vmxmemdup> Opened file: '%s'\n", path);
+        printk("<memdupe> Opened file: '%s'\n", path);
 
         //inode = fp->f_dentry->d_inode;
         inode = fp->f_path.dentry->d_inode;
@@ -126,7 +105,7 @@ static ulong load_file(const char *path, char *data) {
         data = (char *) kmalloc(size + 1, GFP_ATOMIC);
 
         if (data != NULL) {
-            printk("<vmxmemdup> Reading file: '%s'\n", path);
+            printk("<memdupe> Reading file: '%s'\n", path);
 
             fs = get_fs();
             set_fs(KERNEL_DS);
@@ -137,36 +116,19 @@ static ulong load_file(const char *path, char *data) {
             // Restore segment descriptor
             set_fs(fs);
         } else {
-            printk("<vmxmemdup> Error allocating data: %ld bytes\n", size);
+            printk("<memdupe> Error allocating data: %ld bytes\n", size);
             size = 0;
         }
 
         // Close file
-        //sys_close(fd);
         filp_close(fp, NULL);
-        printk("<vmxmemdup> Closed file: '%s'\n", path);
+        printk("<memdupe> Closed file: '%s'\n", path);
     } else {
-        printk("<vmxmemdup> Error opening file: '%s'\n", path);
+        printk("<memdupe> Error opening file: '%s'\n", path);
     }
 
     return size;
 }
-
-//static void write_file(char* path, char* data) {
-//    struct file *fp;
-//    mm_segment_t fs;
-//
-//    fp = filp_open(path, O_RDWR | O_APPEND, 0644);
-//    if(IS_ERR(fp)) {
-//        printk("<vmxmemdup> Error opening file: '%s'\n", path);
-//    } else {
-//        fs = get_fs();
-//        set_fs(KERNEL_DS);
-//        fp->f_op->write(fp, data, strlen(data), &fp->f_pos);
-//        set_fs(fs);
-//        filp_close(fp, NULL);
-//    }
-//}
 
 static void write_pages(char* data, ulong pages, char chr) {
     do {
@@ -182,12 +144,13 @@ static void free_data(char* data[]) {
     }
 }
 
-static int __init vmxmemdup_init(void) {
+static int __init memdupe_init(void) {
     char *data[NUM_READS+1];
 
     uint i;
-    uint vmx_is_on = FALSE;
+    uint vmx_on = FALSE;
     uint thresh_stat = 0;
+    uint cpl_flag = 0;
 
     ulong time1 = 0;
     ulong time2 = 0;
@@ -199,13 +162,16 @@ static int __init vmxmemdup_init(void) {
 
     float ratio = 0.0;
 
-    printk("<vmxmemdup> In vmxon\n");
+    printk("<memdupe> In memdupe_init\n");
     save_registers();
 
     /* Test virtualization */
-    vmx_is_on = do_vmx_check();
+    vmx_on = virt_test();
 
-    if (vmx_is_on) {
+    /* Check CPL flag */
+    cpl_flag = cpl_check();
+
+    if (vmx_on && cpl_flag == CPL_KERN) {
         /* Start timer */
         time1 = get_clock_time();
 
@@ -219,7 +185,7 @@ static int __init vmxmemdup_init(void) {
 
             pages = fsize / MY_PAGE_SIZE;
 
-            printk("<vmxmemdup> File of size %ld B, %ld pages, read in %ld ns\n", fsize, pages, rtime);
+            printk("<memdupe> File of size %ld B, %ld pages, read in %ld ns\n", fsize, pages, rtime);
 
             /* Restart timer for writing pages... */
             time1 = get_clock_time();
@@ -231,19 +197,19 @@ static int __init vmxmemdup_init(void) {
             time2 = get_clock_time();
             wtime = time2 - time1;
 
-            printk("<vmxmemdup> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
+            printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file NUM_READS more times */
             for (i = 1; i <= NUM_READS; i++) {
                 fsize = load_file(FILEPATH, data[i]);
             }
 
-            printk("<vmxmemdup> Read file '%s' %d more times\n", FILEPATH, NUM_READS);
+            printk("<memdupe> Read file '%s' %d more times\n", FILEPATH, NUM_READS);
 
             /* Sleep my pretty... */
             msleep(NUM_SECONDS * 1000);
 
-            printk("<vmxmemdup> Slept for %d seconds\n", NUM_SECONDS);
+            printk("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
 
             /* Restart timer for writing pages... */
             time1 = get_clock_time();
@@ -255,18 +221,18 @@ static int __init vmxmemdup_init(void) {
             time2 = get_clock_time();
             w2time = time2 - time1;
 
-            printk("<vmxmemdup> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
+            printk("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
 
             ratio = (float) w2time / (float) wtime;
             thresh_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
 
-            printk("<vmxmemdup> Ratio = %g = %ld / %ld, Threshold = %g, Status = %d\n",
+            printk("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, thresh_stat);
 
             // Avoid memory leaks...
             free_data(data);
 
-            printk("<vmxmemdup> Freed %d data pointers\n", NUM_READS+1);
+            printk("<memdupe> Freed %d data pointers\n", NUM_READS+1);
         }
     }
 
@@ -275,13 +241,13 @@ static int __init vmxmemdup_init(void) {
     return thresh_stat;
 }
 
-static void __exit vmxmemdup_exit(void) {
-    printk("<vmxmemdup> Done\n");
+static void __exit memdupe_exit(void) {
+    printk("<memdupe> Done\n");
 }
 
-module_init(vmxmemdup_init);
-module_exit(vmxmemdup_exit);
+module_init(memdupe_init);
+module_exit(memdupe_exit);
 
 MODULE_AUTHOR("Eddie Davis <eddiedavis@boisestate.edu>");
-MODULE_DESCRIPTION("VMX Memory Duplication Detector");
+MODULE_DESCRIPTION("KSM Memory Duplication Detector");
 MODULE_LICENSE("GPL v2");
