@@ -27,8 +27,14 @@
 
 #define MESSAGE "Here is the message to be sent through the covert channel"
 
+#define SENDER   0
+#define RECEIVER 1
+
 typedef unsigned int  uint;
 typedef unsigned long ulong;
+
+static int _vmrole;
+static int _sleeptime;
 
 static int virt_test(void);
 static int cpl_check(void);

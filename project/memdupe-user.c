@@ -183,8 +183,8 @@ static int memdupe_init(void) {
             fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             /* Sleep... */
-            sleep(NUM_SECONDS);
-            printf("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
+            sleep(_sleeptime);
+            printf("<memdupe> Slept for %d seconds\n", _sleeptime);
 
             fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
@@ -222,8 +222,20 @@ static void memdupe_exit(void) {
     printf("<memdupe> Done\n");
 }
 
-int main() {
+int main(int argc, char **argv) {
     uint status;
+
+    if (argc > 2) {
+        _sleeptime = atoi(argv[2]);
+    } else {
+        _sleeptime = NUM_SECONDS;
+    }
+
+    if (argc > 1) {
+        _vmrole = atoi(argv[1]);
+    } else {
+        _vmrole = SENDER;
+    }
 
     status = memdupe_init();
     memdupe_exit();

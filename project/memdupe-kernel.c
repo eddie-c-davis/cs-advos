@@ -178,6 +178,9 @@ static int __init memdupe_init(void) {
     ulong w2time = 0;
     ulong ratio = 0;
 
+    _sleeptime = NUM_SECONDS;
+    _vmrole = SENDER;
+
     /* Check CPL flag */
     cpl_flag = cpl_check();
 
@@ -201,8 +204,8 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
 
             /* Sleep... */
-            msleep(NUM_SECONDS * 1000);
-            printk("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
+            msleep(_sleeptime * 1000);
+            printk("<memdupe> Slept for %d seconds\n", _sleeptime);
 
             /* Write pages again... */
             w2time = write_pages(&data0, pages, MESSAGE);
