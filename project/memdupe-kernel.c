@@ -85,7 +85,7 @@ static ulong get_clock_time(void) {
 }
 
 static char *load_file(const char *path, ulong *fsize) {
-    char *data;
+    char *data = NULL;
     struct file *fp;
     struct inode *inode;
     mm_segment_t fs;
@@ -131,11 +131,22 @@ static char *load_file(const char *path, ulong *fsize) {
     return data;
 }
 
-static void write_pages(char** data, ulong pages, char chr) {
+static ulong write_pages(char** data, ulong pages, char chr) {
+    ulong time1 = 0;
+    ulong time2 = 0;
+
+    /* Start timer for writing pages... */
+    time1 = get_clock_time();
+
     do {
         (*data)[pages * MY_PAGE_SIZE - 1] = chr;
         pages--;
     } while (pages > 0);
+
+    /* Stop timer */
+    time2 = get_clock_time();
+
+    return (time2 - time1);
 }
 
 static void free_data(char** data0, char **data1, char **data2) {
@@ -148,16 +159,13 @@ static int __init memdupe_init(void) {
     char *data0, *data1, *data2;
 
     uint vmx_on = FALSE;
-    uint thresh_stat = 0;
+    uint vm_stat = 0;
     uint cpl_flag = 0;
 
-    ulong time1 = 0;
-    ulong time2 = 0;
-    ulong rtime = 0;
-    ulong wtime = 0;
-    ulong w2time = 0;
     ulong fsize;
     ulong pages;
+    ulong wtime = 0;
+    ulong w2time = 0;
 
     float ratio = 0.0;
 
@@ -171,72 +179,45 @@ static int __init memdupe_init(void) {
     cpl_flag = cpl_check();
 
     if (vmx_on && cpl_flag == CPL_KERN) {
-        /* Start timer */
-        time1 = get_clock_time();
-
         /* Load a file */
         data0 = load_file(FILEPATH, &fsize);
 
         if (fsize > 0 && data0 != NULL) {
-            /* Stop timer */
-            time2 = get_clock_time();
-            rtime = time2 - time1;
-
             pages = fsize / MY_PAGE_SIZE;
-
-            printk("<memdupe> File of size %ld B, %ld pages, read in %ld ns\n", fsize, pages, rtime);
-
-            /* Restart timer for writing pages... */
-            time1 = get_clock_time();
+            printk("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
             /* Write pages once... */
-            write_pages(&data0, pages, '.');
-
-            /* Stop timer */
-            time2 = get_clock_time();
-            wtime = time2 - time1;
-
+            wtime = write_pages(&data0, pages, '.');
             printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
             data1 = load_file(FILEPATH, &fsize);
             data2 = load_file(FILEPATH, &fsize);
-
             printk("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
 
             /* Sleep... */
             msleep(NUM_SECONDS * 1000);
-
             printk("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
 
-            /* Restart timer for writing pages... */
-            time1 = get_clock_time();
-
             /* Write pages again... */
-            write_pages(&data0, pages, '.');
-
-            /* Stop timer */
-            time2 = get_clock_time();
-            w2time = time2 - time1;
-
+            w2time = write_pages(&data0, pages, '.');
             printk("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
 
             ratio = (float) w2time / (float) wtime;
-            thresh_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
+            vm_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
 
-            printk("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, Status = %d\n",
-                   ratio, w2time, wtime, KSM_THRESHOLD, thresh_stat);
+            printk("<memdupe> Ratio = %g = %ld / %ld, Threshold = %g, VM_Status = %d\n",
+                   ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
             // Avoid memory leaks...
             free_data(&data0, &data1, &data2);
-
             printk("<memdupe> Freed data pointers\n");
         }
     }
 
     restore_registers();
 
-    return thresh_stat;
+    return vm_stat;
 }
 
 static void __exit memdupe_exit(void) {

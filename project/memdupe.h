@@ -20,7 +20,7 @@
 
 #define NUM_READS     2
 #define NUM_SECONDS   3
-#define KSM_THRESHOLD 1.5
+#define KSM_THRESHOLD 2.0
 
 #define CPL_KERN 0
 #define CPL_USER 3
@@ -33,7 +33,7 @@ static int cpl_check(void);
 
 static ulong get_clock_time(void);
 static char *load_file(const char *path, ulong *fsize);
-static void write_pages(char** data, ulong pages, char chr);
+static ulong write_pages(char** data, ulong pages, char chr);
 static void free_data(char** data0, char **data1, char **data2);
 
 #endif
