@@ -159,13 +159,19 @@ static int memdupe_init(void) {
             data2 = load_file(FILEPATH, &fsize);
             printf("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
 
+            fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+
             /* Sleep... */
             sleep(NUM_SECONDS);
             printf("<memdupe> Slept for %d seconds\n", NUM_SECONDS);
 
+            fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+
             /* Write pages again... */
             w2time = write_pages(&data0, pages, '.');
             printf("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
+
+            fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             ratio = (float) w2time / (float) wtime;
             vm_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
@@ -175,7 +181,6 @@ static int memdupe_init(void) {
 
             if (vm_stat) {
                 /* KSM tells us we are running on a VM, create channel to other VM... */
-                printf("data0 = %p, data1 = %p, data2 = %p", data0, data1, data2);
             }
 
             // Avoid memory leaks...
