@@ -128,7 +128,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
         if (step > 1 && _vmrole == RECEIVER) {
             time2 = get_clock_time();
             tdiff = time2 - time1;
-            fprintf(stderr, "R: Page %ld read in %ld ns\n", index, tdiff);
+            fprintf(stderr, "R: Page %ld written in %ld ns\n", index, tdiff);
         }
 
         index++;
@@ -250,11 +250,6 @@ static int memdupe_init(void) {
 
     float ratio = 0.0;
 
-//    char *bits = encode_message(MESSAGE, &nbits);
-//    msg = decode_message(bits, nbits);
-//    free(bits);
-//    free(msg);
-
     /* Test virtualization */
     vmx_on = virt_test();
     if (vmx_on) {
@@ -268,7 +263,7 @@ static int memdupe_init(void) {
 
     if (cpl_flag == CPL_USER) {
         /* 1) Load a file (same data into memory) -- Sender / Receiver */
-        data0 = load_file(FILEPATH, &fsize);
+        data0 = load_file(_filepath, &fsize);
 
         if (fsize > 0 && data0 != NULL) {
             pages = fsize / MY_PAGE_SIZE;
@@ -279,13 +274,13 @@ static int memdupe_init(void) {
             printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
-            data1 = load_file(FILEPATH, &fsize);
-            data2 = load_file(FILEPATH, &fsize);
-            printf("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
+            data1 = load_file(_filepath, &fsize);
+            data2 = load_file(_filepath, &fsize);
+            printf("<memdupe> Read file '%s' 2 more times\n", _filepath);
 
             //fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
-            /* 3) Sleep and wait for KSM to work -- Sender / REceiver*/
+            /* 3) Sleep and wait for KSM to work -- Sender / Receiver*/
             sleep(_sleeptime);
             printf("<memdupe> Slept for %d seconds\n", _sleeptime);
 
@@ -327,6 +322,12 @@ static void memdupe_exit(void) {
 int main(int argc, char **argv) {
     uint status;
 
+    if (argc > 3) {
+        strcpy(_filepath, argv[3]);
+    } else {
+        strcpy(_filepath, FILEPATH);
+    }
+
     if (argc > 2) {
         _sleeptime = atoi(argv[2]);
     } else {
@@ -341,6 +342,8 @@ int main(int argc, char **argv) {
 
     status = memdupe_init();
     memdupe_exit();
+
+    
 
     return status;
 }

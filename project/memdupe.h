@@ -38,6 +38,7 @@
 typedef unsigned int  uint;
 typedef unsigned long ulong;
 
+static char _filepath[1024];
 static int _vmrole;
 static int _sleeptime;
 
