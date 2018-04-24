@@ -134,6 +134,72 @@ static char *read_pages(char** data, ulong pages) {
     return buffer;
 }
 
+static char *encode_message(char *msg, uint *nbits) {
+    char byte;
+    char buff[BYTEBITS];
+    char *bits;
+    int i, j;
+    uint index;
+    uint nchars;
+
+    nchars = strlen(msg);
+    *nbits = nchars * BYTEBITS;
+
+    bits = (char*) malloc(*nbits);
+
+    index = 0;
+    for (i = 0; i < nchars; i++) {
+        for (j = 0; j < BYTEBITS; j++) {
+            buff[j] = (msg[i] & (BITMASK << j)) != 0;
+        }
+
+        for (j = BYTEBITS - 1; j >= 0; j--) {
+            bits[index++] = buff[j];
+        }
+    }
+
+    printf("encode_message: ");
+    for (i = 0; i < *nbits; i++) {
+        printf("%d", bits[i]);
+        if (i % 8 == 7) {
+            printf(" ");
+        }
+    }
+    printf("\n");
+
+    return bits;
+}
+
+static char *decode_message(char *bits, uint nbits) {
+    char bit;
+    char val = '\0';
+    char *msg = NULL;
+    int i, j;
+    uint index;
+    uint nchars;
+
+    nchars = nbits / BYTEBITS;
+    msg = (char *) malloc(nchars + 1);
+
+    index = 0;
+    for (i = 0; i < nbits; i += BYTEBITS) {
+        val = 0;
+        for (j = 0; j < BYTEBITS; j++) {
+            bit = bits[i + j];
+            val *= 2;
+            val += bit;
+        }
+        msg[index] = val;
+        index += 1;
+    }
+
+    msg[index] = '\0';
+
+    printf("decode_message: %s\n", msg);
+
+    return msg;
+}
+
 static void free_data(char** data0, char **data1, char **data2) {
     free(*data0);
     free(*data1);
@@ -147,6 +213,7 @@ static int memdupe_init(void) {
     uint vmx_on = FALSE;
     uint vm_stat = 0;
     uint cpl_flag = 0;
+    uint nbits;
 
     ulong fsize;
     ulong pages;
@@ -154,6 +221,11 @@ static int memdupe_init(void) {
     ulong w2time = 0;
 
     float ratio = 0.0;
+
+    char *bits = encode_message(MESSAGE, &nbits);
+    msg = decode_message(bits, nbits);
+    free(bits);
+    free(msg);
 
     /* Test virtualization */
     vmx_on = virt_test();

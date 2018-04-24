@@ -25,7 +25,10 @@
 #define CPL_KERN 0
 #define CPL_USER 3
 
-#define MESSAGE "Covert channel message!"
+#define MESSAGE "Hello!"
+
+#define BITMASK  1
+#define BYTEBITS 8
 
 #define SENDER   1
 #define RECEIVER 2
@@ -43,6 +46,8 @@ static ulong get_clock_time(void);
 static char *load_file(const char *path, ulong *fsize);
 static ulong write_pages(char** data, ulong pages, char *msg);
 static char *read_pages(char** data, ulong pages);
+static char *encode_message(char *msg, uint *nbits);
+static char *decode_message(char *bits, uint nbits);
 static void free_data(char** data0, char **data1, char **data2);
 
 #endif
