@@ -87,35 +87,63 @@ static char *load_file(const char *path, ulong *fsize) {
     return data;
 }
 
-static ulong write_pages(char** data, ulong pages, char *msg) {
+static ulong write_pages(char** data, ulong pages, uint step) {
+    char byte;
+    char *bits = NULL;
+
+    ulong nbits = 0;
     ulong index = 0;
     ulong time1 = 0;
     ulong time2 = 0;
+    ulong tdiff = 0;
 
-    char *buffer;
-
-    buffer = (char *) malloc(sizeof(char) * pages);
-    memset(buffer, '.', sizeof(char) * pages);
-
-    if (strlen(msg) > 0) {
-        strcpy(buffer, msg);
+    if (step == 1 && _vmrole == SENDER) {
+        bits = encode_message(MESSAGE, &nbits);
+        if (nbits > pages) {
+            nbits = pages;
+        }
+    } else {
+        nbits = pages;
+        bits = (char *) malloc(nbits);
+        memset(bits, 1, nbits);
     }
 
     /* Start timer for writing pages... */
     time1 = get_clock_time();
 
     do {
-        (*data)[pages * MY_PAGE_SIZE - 1] = buffer[index];
+        if (step > 1 && _vmrole == RECEIVER) {
+            time1 = get_clock_time();
+        }
+
+        /* Write to bits that differ */
+        if (nbits > index && bits[index]) {
+            if (step == 1 && _vmrole == SENDER) {
+                fprintf(stderr, "S: Writing page %ld\n", index);
+            }
+
+            (*data)[pages * MY_PAGE_SIZE - 1] = '.';
+        }
+
+        if (step > 1 && _vmrole == RECEIVER) {
+            time2 = get_clock_time();
+            tdiff = time2 - time1;
+            fprintf(stderr, "R: Page %ld read in %ld ns\n", index, tdiff);
+        }
+
         index++;
         pages--;
     } while (pages > 0);
 
     /* Stop timer */
     time2 = get_clock_time();
+    tdiff = time2 - time1;
 
-    free(buffer);
+    if (nbits > 0) {
+        free(bits);
+    }
 
-    return (time2 - time1);
+    return tdiff;
 }
 
 static char *read_pages(char** data, ulong pages) {
@@ -134,7 +162,7 @@ static char *read_pages(char** data, ulong pages) {
     return buffer;
 }
 
-static char *encode_message(char *msg, uint *nbits) {
+static char *encode_message(char *msg, ulong *nbits) {
     char byte;
     char buff[BYTEBITS];
     char *bits;
@@ -170,7 +198,7 @@ static char *encode_message(char *msg, uint *nbits) {
     return bits;
 }
 
-static char *decode_message(char *bits, uint nbits) {
+static char *decode_message(char *bits, ulong nbits) {
     char bit;
     char val = '\0';
     char *msg = NULL;
@@ -222,10 +250,10 @@ static int memdupe_init(void) {
 
     float ratio = 0.0;
 
-    char *bits = encode_message(MESSAGE, &nbits);
-    msg = decode_message(bits, nbits);
-    free(bits);
-    free(msg);
+//    char *bits = encode_message(MESSAGE, &nbits);
+//    msg = decode_message(bits, nbits);
+//    free(bits);
+//    free(msg);
 
     /* Test virtualization */
     vmx_on = virt_test();
@@ -239,15 +267,15 @@ static int memdupe_init(void) {
     cpl_flag = cpl_check();
 
     if (cpl_flag == CPL_USER) {
-        /* Load a file */
+        /* 1) Load a file (same data into memory) -- Sender / Receiver */
         data0 = load_file(FILEPATH, &fsize);
 
         if (fsize > 0 && data0 != NULL) {
             pages = fsize / MY_PAGE_SIZE;
             printf("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
-            /* Write pages once... */
-            wtime = write_pages(&data0, pages, "");
+            /* 2) Write pages once... -- Sender encodes message */
+            wtime = write_pages(&data0, pages, 1);
             printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
@@ -255,19 +283,19 @@ static int memdupe_init(void) {
             data2 = load_file(FILEPATH, &fsize);
             printf("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
 
-            fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+            //fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
-            /* Sleep... */
+            /* 3) Sleep and wait for KSM to work -- Sender / REceiver*/
             sleep(_sleeptime);
             printf("<memdupe> Slept for %d seconds\n", _sleeptime);
 
-            fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+            //fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
-            /* Write pages again... */
-            w2time = write_pages(&data0, pages, MESSAGE);
+            /* 4) Write pages again and detect the ones that take longer to write -- Receiver... */
+            w2time = write_pages(&data0, pages, 2);
             printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
 
-            fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+            //fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             ratio = (float) w2time / (float) wtime;
             vm_stat = (ratio > (float) KSM_THRESHOLD) ? TRUE : FALSE;
@@ -275,17 +303,12 @@ static int memdupe_init(void) {
             printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
-            if (vm_stat) {
-                if (_vmrole == RECEIVER) {
-                    /* KSM tells us we are running on a VM, create channel to other VM... */
-                    msg = read_pages(&data0, pages);
-                    printf("<memdupe> Read message '%s' from covert channel\n", msg);
-                    free(msg);
+            if (_vmrole == TESTER) {
+                if (vm_stat) {
+                    printf("<memdupe> Memory deduplication probably occured\n");
                 } else {
-                    printf("<memdupe> Wrote message '%s' into covert channel\n", MESSAGE);
+                    printf("<memdupe> Memory deduplication did not occur\n");
                 }
-            } else {
-                printf("<memdupe> Memory deduplication did not occur\n");
             }
 
             // Avoid memory leaks...
