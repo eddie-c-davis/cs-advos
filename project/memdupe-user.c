@@ -352,6 +352,11 @@ int main(int argc, char **argv) {
     status = memdupe_init();
     memdupe_exit();
 
+    // Check this file:
+    // /sys/kernel/mm/ksm/pages_shared
+    // Need this when running on host: madvise(MADV_MERGEABLE)
+    //#include <sys/mman.h>
+    //int madvise(void *addr, size_t length, int advice);
 
 
     return status;
