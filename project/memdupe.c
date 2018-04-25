@@ -348,20 +348,22 @@ int main(int argc, char **argv) {
     }
 
     if (argc > 1) {
-        _vmrole = atoi(argv[1]);
+        if (strstr(argv[1], "-h")) {
+            printf("usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/perl\n");
+            _vmrole = -1;
+        } else {
+            _vmrole = atoi(argv[1]);
+        }
     } else {
         _vmrole = 0;
     }
 
-    status = memdupe_init();
-    memdupe_exit();
-
-    // Check this file:
-    // /sys/kernel/mm/ksm/pages_shared
-    // Need this when running on host: madvise(MADV_MERGEABLE)
-    //#include <sys/mman.h>
-    //int madvise(void *addr, size_t length, int advice);
-
+    if (_vmrole >= 0) {
+        // Check this file:
+        // /sys/kernel/mm/ksm/pages_shared
+        status = memdupe_init();
+        memdupe_exit();
+    }
 
     return status;
 }

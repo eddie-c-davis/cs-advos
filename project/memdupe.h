@@ -19,7 +19,7 @@
 #define FILEPATH "/usr/bin/perl"
 
 #define NUM_READS     2
-#define NUM_SECONDS   3
+#define NUM_SECONDS   5
 #define KSM_THRESHOLD 2
 
 #define CPL_KERN 0
