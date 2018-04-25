@@ -94,6 +94,7 @@ static char *load_file(const char *path, ulong *fsize) {
 static ulong write_pages(char** data, ulong pages, uint step) {
     char byte;
     char *bits = NULL;
+    char *msg = NULL;
     uint dowrite = 0;
     uint islong = 0;
     ulong nbits = 0;
@@ -147,6 +148,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
                 fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
             } else if (step > 1 && _vmrole == RECEIVER) {
                 fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
+                bits[index] = islong;
             }
         }
 
@@ -157,6 +159,12 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     /* Stop timer */
     tend = get_clock_time();
     tdiff = tend - tinit;
+
+    /* Decode the message */
+    if (step > 1 && _vmrole == RECEIVER) {
+        msg = decode_message(bits, index);
+        free(msg);
+    }
 
     if (nbits > 0) {
         free(bits);
@@ -205,7 +213,7 @@ static char *encode_message(char *msg, ulong *nbits) {
         }
     }
 
-    printf("encode_message: ");
+    printf("encode_message: '%s' => ", msg);
     for (i = 0; i < *nbits; i++) {
         printf("%d", bits[i]);
         if (i % 8 == 7) {
