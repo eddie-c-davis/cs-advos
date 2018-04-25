@@ -95,6 +95,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     char byte;
     char *bits = NULL;
     uint dowrite = 0;
+    uint islong = 0;
     ulong nbits = 0;
     ulong index = 0;
     ulong tinit = 0;
@@ -102,6 +103,8 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     ulong time2 = 0;
     ulong tend = 0;
     ulong tdiff = 0;
+    ulong tsum = 0;
+    ulong tmean = 0;
 
     if (step == 1 && _vmrole == SENDER) {
         bits = encode_message(MESSAGE, &nbits);
@@ -119,7 +122,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     tinit = get_clock_time();
 
     if (step == 1 && _vmrole > TESTER) {
-        fprintf(stderr, "Op,Page,Time\n");
+        fprintf(stderr, "Op,Page,Time,Long?\n");
     }
 
     do {
@@ -136,11 +139,14 @@ static ulong write_pages(char** data, ulong pages, uint step) {
         if (_vmrole > TESTER) {
             time2 = get_clock_time();
             tdiff = time2 - time1;
+            tsum += tdiff;
+            tmean = tsum / (index + 1);
+            islong = (tdiff > KSM_THRESHOLD * tmean);
 
             if (dowrite && step == 1 && _vmrole == SENDER) {
-                fprintf(stderr, "W,%ld,%ld\n", index, tdiff);
+                fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
             } else if (step > 1 && _vmrole == RECEIVER) {
-                fprintf(stderr, "R,%ld,%ld\n", index, tdiff);
+                fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
             }
         }
 
