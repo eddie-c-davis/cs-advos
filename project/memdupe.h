@@ -51,6 +51,6 @@ static ulong write_pages(char** data, ulong pages, uint step);
 static char *read_pages(char** data, ulong pages);
 static char *encode_message(char *msg, ulong *nbits);
 static char *decode_message(char *bits, ulong nbits);
-static void free_data(char** data0, char **data1, char **data2);
+static void free_data(ulong fsize, char** data0, char **data1, char **data2);
 
 #endif

@@ -3,6 +3,9 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 
 #include "memdupe.h"
 
@@ -54,31 +57,32 @@ static ulong get_clock_time(void) {
 
 static char *load_file(const char *path, ulong *fsize) {
     char *data;
-    FILE *fp;
+    int fd;
+    struct stat st;
 
     // Open file
-    fp = fopen(path, "rb");
+    fd = open(path, O_RDONLY);
 
-    if (fp != NULL) {
+    if (fd >= 0) {
         /* Get file size */
-        fseek(fp, 0, SEEK_END);
-        *fsize = ftell(fp);
-        rewind(fp);
+        fstat(fd, &st);
+        *fsize = st.st_size;
 
         // Allocate buffer...
-        data = (char *) malloc(*fsize + 1);
+        printf("<memdupe> Reading file: '%s'\n", path);
+        data = (char*) mmap(NULL, *fsize + 1, PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED, -1, 0);
 
         if (data != NULL) {
-            printf("<memdupe> Reading file: '%s'\n", path);
-            fread(data, *fsize, 1, fp);
+            read(fd, data, *fsize);
             data[*fsize] = '\0';  // Terminate string
+            madvise(data, *fsize + 1, MADV_MERGEABLE);
         } else {
             printf("<memdupe> Error allocating data: %ld bytes\n", *fsize);
             *fsize = 0;
         }
 
         // Close file
-        fclose(fp);
+        close(fd);
     } else {
         printf("<memdupe> Error opening file: '%s'\n", path);
         *fsize = 0;
@@ -237,10 +241,10 @@ static char *decode_message(char *bits, ulong nbits) {
     return msg;
 }
 
-static void free_data(char** data0, char **data1, char **data2) {
-    free(*data0);
-    free(*data1);
-    free(*data2);
+static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
+    munmap(data0, fsize + 1);
+    munmap(data1, fsize + 1);
+    munmap(data2, fsize + 1);
 }
 
 static int memdupe_init(void) {
@@ -316,7 +320,7 @@ static int memdupe_init(void) {
             }
 
             // Avoid memory leaks...
-            free_data(&data0, &data1, &data2);
+            free_data(fsize, &data0, &data1, &data2);
             printf("<memdupe> Freed data pointers\n");
         }
     }

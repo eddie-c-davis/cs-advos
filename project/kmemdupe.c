@@ -160,7 +160,7 @@ static char *read_pages(char** data, ulong pages) {
     return buffer;
 }
 
-static void free_data(char** data0, char **data1, char **data2) {
+static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
     kfree(*data0);
     kfree(*data1);
     kfree(*data2);
@@ -228,7 +228,7 @@ static int __init memdupe_init(void) {
             }
 
             // Avoid memory leaks...
-            free_data(&data0, &data1, &data2);
+            free_data(fsize, &data0, &data1, &data2);
             printk("<memdupe> Freed data pointers\n");
         }
     }
