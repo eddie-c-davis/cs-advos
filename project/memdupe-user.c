@@ -93,8 +93,10 @@ static ulong write_pages(char** data, ulong pages, uint step) {
 
     ulong nbits = 0;
     ulong index = 0;
+    ulong tinit = 0;
     ulong time1 = 0;
     ulong time2 = 0;
+    ulong tend = 0;
     ulong tdiff = 0;
 
     if (step == 1 && _vmrole == SENDER) {
@@ -109,7 +111,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     }
 
     /* Start timer for writing pages... */
-    time1 = get_clock_time();
+    tinit = get_clock_time();
 
     do {
         if (step > 1 && _vmrole == RECEIVER) {
@@ -136,8 +138,8 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     } while (pages > 0);
 
     /* Stop timer */
-    time2 = get_clock_time();
-    tdiff = time2 - time1;
+    tend = get_clock_time();
+    tdiff = tend - tinit;
 
     if (nbits > 0) {
         free(bits);
@@ -343,7 +345,7 @@ int main(int argc, char **argv) {
     status = memdupe_init();
     memdupe_exit();
 
-    
+
 
     return status;
 }
