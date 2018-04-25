@@ -90,7 +90,7 @@ static char *load_file(const char *path, ulong *fsize) {
 static ulong write_pages(char** data, ulong pages, uint step) {
     char byte;
     char *bits = NULL;
-
+    uint dowrite = 0;
     ulong nbits = 0;
     ulong index = 0;
     ulong tinit = 0;
@@ -105,6 +105,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
             nbits = pages;
         }
     } else {
+        /* Write every page if not the SENDER */
         nbits = pages;
         bits = (char *) malloc(nbits);
         memset(bits, 1, nbits);
@@ -113,24 +114,30 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     /* Start timer for writing pages... */
     tinit = get_clock_time();
 
+    if (step == 1 && _vmrole > TESTER) {
+        fprintf(stderr, "Op,Page,Time\n");
+    }
+
     do {
-        if (step > 1 && _vmrole == RECEIVER) {
+        if (_vmrole > TESTER) {
             time1 = get_clock_time();
         }
 
         /* Write to bits that differ */
-        if (nbits > index && bits[index]) {
-            if (step == 1 && _vmrole == SENDER) {
-                fprintf(stderr, "S: Writing page %ld\n", index);
-            }
-
+        dowrite = (nbits > index && bits[index]);
+        if (dowrite) {
             (*data)[pages * MY_PAGE_SIZE - 1] = '.';
         }
 
-        if (step > 1 && _vmrole == RECEIVER) {
+        if (_vmrole > TESTER) {
             time2 = get_clock_time();
             tdiff = time2 - time1;
-            fprintf(stderr, "R: Page %ld written in %ld ns\n", index, tdiff);
+
+            if (dowrite && step == 1 && _vmrole == SENDER) {
+                fprintf(stderr, "W,%ld,%ld\n", index, tdiff);
+            } else if (step > 1 && _vmrole == RECEIVER) {
+                fprintf(stderr, "R,%ld,%ld\n", index, tdiff);
+            }
         }
 
         index++;
