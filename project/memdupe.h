@@ -1,7 +1,10 @@
-/*
-* memdupe - Detect memory duplication using KSM in KVM.
-*/
-
+/**
+ * @author Eddie Davis
+ * @project memdupe
+ * @file memdupe.h
+ * @brief Detect memory duplication using KSM in KVM.
+ * @date 4-25-2018
+ */
 #ifndef _MEMDUPE_H_
 #define _MEMDUPE_H_
 
@@ -44,11 +47,9 @@ static int _sleeptime;
 
 static int virt_test(void);
 static int cpl_check(void);
-
 static ulong get_clock_time(void);
 static char *load_file(const char *path, ulong *fsize);
 static ulong write_pages(char** data, ulong pages, uint step);
-static char *read_pages(char** data, ulong pages);
 static char *encode_message(char *msg, ulong *nbits);
 static char *decode_message(char *bits, ulong nbits);
 static void free_data(ulong fsize, char** data0, char **data1, char **data2);

@@ -144,31 +144,79 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     return (time2 - time1);
 }
 
-static char *read_pages(char** data, ulong pages) {
-    char *buffer = NULL;
-    ulong index = 0;
-
-    buffer = (char *) kmalloc(sizeof(char) * pages, GFP_ATOMIC);
-    memset(buffer, '.', sizeof(char) * pages);
-
-    do {
-        buffer[index] = (*data)[pages * MY_PAGE_SIZE - 1];
-        index++;
-        pages--;
-    } while (pages > 0);
-
-    return buffer;
-}
-
 static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
     kfree(*data0);
     kfree(*data1);
     kfree(*data2);
 }
 
+static char *encode_message(char *msg, ulong *nbits) {
+    char buff[BYTEBITS];
+    char *bits;
+    int i, j;
+    uint index;
+    uint nchars;
+
+    nchars = strlen(msg);
+    *nbits = nchars * BYTEBITS;
+
+    bits = (char*) kmalloc(*nbits, GFP_ATOMIC);
+
+    index = 0;
+    for (i = 0; i < nchars; i++) {
+        for (j = 0; j < BYTEBITS; j++) {
+            buff[j] = (msg[i] & (BITMASK << j)) != 0;
+        }
+
+        for (j = BYTEBITS - 1; j >= 0; j--) {
+            bits[index++] = buff[j];
+        }
+    }
+
+    printk("encode_message: '%s' => ", msg);
+    for (i = 0; i < *nbits; i++) {
+        printk("%d", bits[i]);
+        if (i % 8 == 7) {
+            printk(" ");
+        }
+    }
+    printk("\n");
+
+    return bits;
+}
+
+static char *decode_message(char *bits, ulong nbits) {
+    char bit;
+    char val = '\0';
+    char *msg = NULL;
+    int i, j;
+    uint index;
+    uint nchars;
+
+    nchars = nbits / BYTEBITS;
+    msg = (char *) kmalloc(nchars + 1, GFP_ATOMIC);
+
+    index = 0;
+    for (i = 0; i < nbits; i += BYTEBITS) {
+        val = 0;
+        for (j = 0; j < BYTEBITS; j++) {
+            bit = bits[i + j];
+            val *= 2;
+            val += bit;
+        }
+        msg[index] = val;
+        index += 1;
+    }
+
+    msg[index] = '\0';
+
+    printk("decode_message: %s\n", msg);
+
+    return msg;
+}
+
 static int __init memdupe_init(void) {
     char *data0, *data1, *data2;
-    char *msg;
 
     uint vm_stat = 0;
     uint cpl_flag = 0;
@@ -181,6 +229,7 @@ static int __init memdupe_init(void) {
 
     _sleeptime = NUM_SECONDS;
     _vmrole = SENDER;
+    strcpy(_filepath, FILEPATH);
 
     /* Check CPL flag */
     cpl_flag = cpl_check();
@@ -189,7 +238,7 @@ static int __init memdupe_init(void) {
         printk("<memdupe> Running memdupe_init in kernel mode\n");
 
         /* Load a file */
-        data0 = load_file(FILEPATH, &fsize);
+        data0 = load_file(_filepath, &fsize);
 
         if (fsize > 0 && data0 != NULL) {
             pages = fsize / MY_PAGE_SIZE;
@@ -200,13 +249,13 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
-            data1 = load_file(FILEPATH, &fsize);
-            data2 = load_file(FILEPATH, &fsize);
-            printk("<memdupe> Read file '%s' 2 more times\n", FILEPATH);
+            data1 = load_file(_filepath, &fsize);
+            data2 = load_file(_filepath, &fsize);
+            printk("<memdupe> Read file '%s' 2 more times\n", _filepath);
 
             /* Sleep... */
+            printk("<memdupe> Sleep for %d seconds\n", _sleeptime);
             msleep(_sleeptime * 1000);
-            printk("<memdupe> Slept for %d seconds\n", _sleeptime);
 
             /* Write pages again... */
             w2time = write_pages(&data0, pages, 2);
@@ -219,10 +268,7 @@ static int __init memdupe_init(void) {
                    ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
 
             if (vm_stat) {
-                /* KSM tells us we are running on a VM, create channel to other VM... */
-                msg = read_pages(&data0, pages);
-                printk("<memdupe> Read message '%s' from covert channel\n", msg);
-                kfree(msg);
+                printk("<memdupe> Memory deduplication probably occurred\n");
             } else {
                 printk("<memdupe> Memory deduplication did not occur\n");
             }

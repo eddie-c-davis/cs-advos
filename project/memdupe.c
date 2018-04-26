@@ -1,3 +1,11 @@
+/**
+ * @author Eddie Davis
+ * @project memdupe
+ * @file memdupe.c
+ * @headerfile memdupe.h
+ * @brief Detect memory duplication using KSM in KVM.
+ * @date 4-25-2018
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +17,11 @@
 
 #include "memdupe.h"
 
+/**
+ * cpl_check
+ * Check the CPL register to get privilege level (0=kernel, 3=user)
+ * @return CPU privilege level
+ */
 static int cpl_check(void) {
     uint csr, mask, cpl;
     asm("movl %%cs,%0" : "=r" (csr));
@@ -23,6 +36,11 @@ static int cpl_check(void) {
     return cpl;
 }
 
+/**
+ * virt_test
+ * @brief Parses /proc/cpuinfo and checks for the hypervisor flag.
+ * @return True if running in guest mode
+ */
 static int virt_test(void) {
     char line[BUFFER_SIZE];
     uint virt_on = FALSE;
@@ -36,7 +54,6 @@ static int virt_test(void) {
                 virt_on = TRUE;
             }
         }
-
         fclose(fp);
     } else {
         printf("<memdupe> Error: Could not open file '/proc/cpuinfo'\n");
@@ -45,36 +62,50 @@ static int virt_test(void) {
     return virt_on;
 }
 
+/**
+ * get_clock_time
+ * @brief Get CPU clock time in nanoseconds using clock_gettime.
+ * @return CPU clock time in nanoseconds
+ */
 static ulong get_clock_time(void) {
     struct timespec ts;
-    ulong now;
+    ulong now = 0;
 
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
-    now = ts.tv_sec * BILLION + ts.tv_nsec;
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) >= 0) {
+        now = ts.tv_sec * BILLION + ts.tv_nsec;
+    }
 
     return now;
 }
 
+/**
+ * load_file
+ * @brief Load file into memory
+ * @param path Path of file to load
+ * @param fsize Pointer to file size
+ * @return Pointer to the buffer containing the file
+ */
 static char *load_file(const char *path, ulong *fsize) {
     char *data;
     int fd;
     struct stat st;
 
-    // Open file
+    // Open the file
     fd = open(path, O_RDONLY);
-
     if (fd >= 0) {
         /* Get file size */
         fstat(fd, &st);
         *fsize = st.st_size;
 
-        // Allocate buffer...
+        // Allocate buffer using mmap
         printf("<memdupe> Reading file: '%s'\n", path);
         data = (char*) mmap(NULL, *fsize + 1, PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED, -1, 0);
 
         if (data != NULL) {
+            // Read the file
             read(fd, data, *fsize);
             data[*fsize] = '\0';  // Terminate string
+            // Indicate that the buffer can be merged by KSM
             madvise(data, *fsize + 1, MADV_MERGEABLE);
         } else {
             printf("<memdupe> Error allocating data: %ld bytes\n", *fsize);
@@ -91,6 +122,13 @@ static char *load_file(const char *path, ulong *fsize) {
     return data;
 }
 
+/**
+ * write_pages
+ * @param data Pointer to the file data in memory
+ * @param pages Number of pages occupied by the file
+ * @param step Step indicates whether first write or second
+ * @return Clock time required to write pages (ns)
+ */
 static ulong write_pages(char** data, ulong pages, uint step) {
     char byte;
     char *bits = NULL;
@@ -107,7 +145,8 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     ulong tsum = 0;
     ulong tmean = 0;
 
-    if (step == 1 && _vmrole == SENDER) {
+    if (_vmrole == SENDER) {
+        /* Encode the message bytes => bits if the Sender */
         bits = encode_message(MESSAGE, &nbits);
         if (nbits > pages) {
             nbits = pages;
@@ -131,23 +170,27 @@ static ulong write_pages(char** data, ulong pages, uint step) {
             time1 = get_clock_time();
         }
 
-        /* Write to bits that differ */
+        /* Write to 1 bits */
         dowrite = (nbits > index && bits[index]);
         if (dowrite) {
             (*data)[pages * MY_PAGE_SIZE - 1] = '.';
         }
 
         if (_vmrole > TESTER) {
+            // Calculate time to write page
             time2 = get_clock_time();
             tdiff = time2 - time1;
+
+            // Calculate the running mean and determine if it exceeds the KSM threshold
             tsum += tdiff;
             tmean = tsum / (index + 1);
             islong = (tdiff > KSM_THRESHOLD * tmean);
 
-            if (dowrite && step == 1 && _vmrole == SENDER) {
+            if (dowrite && _vmrole == SENDER) {
                 fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
             } else if (step > 1 && _vmrole == RECEIVER) {
                 fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
+                // If write time is long, COW means page has been deduplicated
                 bits[index] = islong;
             }
         }
@@ -160,12 +203,13 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     tend = get_clock_time();
     tdiff = tend - tinit;
 
-    /* Decode the message */
+    /* Decode the message if Receiver */
     if (step > 1 && _vmrole == RECEIVER) {
         msg = decode_message(bits, index);
         free(msg);
     }
 
+    // Free memory...
     if (nbits > 0) {
         free(bits);
     }
@@ -173,24 +217,14 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     return tdiff;
 }
 
-static char *read_pages(char** data, ulong pages) {
-    char *buffer = NULL;
-    ulong index = 0;
-
-    buffer = (char *) malloc(sizeof(char) * pages);
-    memset(buffer, '.', sizeof(char) * pages);
-
-    do {
-        buffer[index] = (*data)[pages * MY_PAGE_SIZE - 1];
-        index++;
-        pages--;
-    } while (pages > 0);
-
-    return buffer;
-}
-
+/**
+ * encode_message
+ * @brief Encode message before sending through covert channel (bytes => bits)
+ * @param msg The message to be encoded (bytes)
+ * @param nbits Pointer to the number of bits in the encoded message
+ * @return Pointer to the encoded buffer (bits)
+ */
 static char *encode_message(char *msg, ulong *nbits) {
-    char byte;
     char buff[BYTEBITS];
     char *bits;
     int i, j;
@@ -213,7 +247,7 @@ static char *encode_message(char *msg, ulong *nbits) {
         }
     }
 
-    printf("encode_message: '%s' => ", msg);
+    printf("<memdupe> Encoded message: '%s' => ", msg);
     for (i = 0; i < *nbits; i++) {
         printf("%d", bits[i]);
         if (i % 8 == 7) {
@@ -225,6 +259,13 @@ static char *encode_message(char *msg, ulong *nbits) {
     return bits;
 }
 
+/**
+ * decode_message
+ * @brief Decode message received through covert channel (bits => bytes)
+ * @param bits Pointer to array of bits from writing pages
+ * @param nbits Number of bits in the message
+ * @return Pointer to the decoded message
+ */
 static char *decode_message(char *bits, ulong nbits) {
     char bit;
     char val = '\0';
@@ -249,18 +290,30 @@ static char *decode_message(char *bits, ulong nbits) {
     }
 
     msg[index] = '\0';
-
-    printf("decode_message: %s\n", msg);
+    printf("<memdupe> Decoded message: '%s\'n", msg);
 
     return msg;
 }
 
+/**
+ * free_data
+ * @brief Free data allocated during execution
+ * @param fsize File size loaded in each file
+ * @param data0 First data pointer
+ * @param data1 Second data pointer
+ * @param data2 Third data pointer
+ */
 static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
     munmap(data0, fsize + 1);
     munmap(data1, fsize + 1);
     munmap(data2, fsize + 1);
 }
 
+/**
+ * memdupe_init
+ * @brief Setup and run
+ * @return Virtualization status
+ */
 static int memdupe_init(void) {
     char *data0, *data1, *data2;
     char *msg;
@@ -296,38 +349,34 @@ static int memdupe_init(void) {
             pages = fsize / MY_PAGE_SIZE;
             printf("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
-            /* 2) Write pages once... -- Sender encodes message */
-            wtime = write_pages(&data0, pages, 1);
-            printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
-
             /* Load file 2 more times */
             data1 = load_file(_filepath, &fsize);
             data2 = load_file(_filepath, &fsize);
             printf("<memdupe> Read file '%s' 2 more times\n", _filepath);
 
-            //fprintf(stderr, "pre-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+            /* 2) Write pages once... -- Sender encodes message */
+            wtime = write_pages(&data0, pages, 1);
+            printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
 
             /* 3) Sleep and wait for KSM to work -- Sender / Receiver*/
+            printf("<memdupe> Sleep for %d seconds\n", _sleeptime);
             sleep(_sleeptime);
-            printf("<memdupe> Slept for %d seconds\n", _sleeptime);
-
-            //fprintf(stderr, "post-sleep: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
 
             /* 4) Write pages again and detect the ones that take longer to write -- Receiver... */
-            w2time = write_pages(&data0, pages, 2);
-            printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
+            if (_vmrole != SENDER) {
+                w2time = write_pages(&data0, pages, 2);
+                printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
 
-            //fprintf(stderr, "post-write: data0 = %p, data1 = %p, data2 = %p\n", data0, data1, data2);
+                ratio = (float) w2time / (float) wtime;
+                vm_stat = (ratio > (float) KSM_THRESHOLD) ? TRUE : FALSE;
 
-            ratio = (float) w2time / (float) wtime;
-            vm_stat = (ratio > (float) KSM_THRESHOLD) ? TRUE : FALSE;
-
-            printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
-                   ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
+                printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
+                       ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
+            }
 
             if (_vmrole == TESTER) {
                 if (vm_stat) {
-                    printf("<memdupe> Memory deduplication probably occured\n");
+                    printf("<memdupe> Memory deduplication probably occurred\n");
                 } else {
                     printf("<memdupe> Memory deduplication did not occur\n");
                 }
@@ -342,10 +391,20 @@ static int memdupe_init(void) {
     return vm_stat;
 }
 
+/**
+ * memdupe_exit
+ * @brief Finish and perform any cleanup
+ */
 static void memdupe_exit(void) {
     printf("<memdupe> Done\n");
 }
 
+/**
+ * Main function
+ * @param argc Arg count
+ * @param argv Arguments
+ * @return Exit status
+ */
 int main(int argc, char **argv) {
     uint status;
 
