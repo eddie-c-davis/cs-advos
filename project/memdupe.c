@@ -161,14 +161,12 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     /* Start timer for writing pages... */
     tinit = get_clock_time();
 
-    if (step == 1 && _vmrole > TESTER) {
+    if (step == 1) {
         fprintf(stderr, "Op,Page,Time,Long?\n");
     }
 
     do {
-        if (_vmrole > TESTER) {
-            time1 = get_clock_time();
-        }
+        time1 = get_clock_time();
 
         /* Write to 1 bits */
         dowrite = (nbits > index && bits[index]);
@@ -176,23 +174,21 @@ static ulong write_pages(char** data, ulong pages, uint step) {
             (*data)[pages * MY_PAGE_SIZE - 1] = '.';
         }
 
-        if (_vmrole > TESTER) {
-            // Calculate time to write page
-            time2 = get_clock_time();
-            tdiff = time2 - time1;
+        // Calculate time to write page
+        time2 = get_clock_time();
+        tdiff = time2 - time1;
 
-            // Calculate the running mean and determine if it exceeds the KSM threshold
-            tsum += tdiff;
-            tmean = tsum / (index + 1);
-            islong = (tdiff > _ksmthresh * tmean);
+        // Calculate the running mean and determine if it exceeds the KSM threshold
+        tsum += tdiff;
+        tmean = tsum / (index + 1);
+        islong = (tdiff > _ksmthresh * tmean);
 
-            if (dowrite && _vmrole == SENDER) {
-                fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
-            } else if (step > 1 && _vmrole == RECEIVER) {
-                fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
-                // If write time is long, COW means page has been deduplicated by receier
-                bits[index] = !islong;
-            }
+        if (dowrite && _vmrole == SENDER) {
+            fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
+        } else if (step > 1) {
+            fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
+            // If write time is long, COW means page has been deduplicated by receier
+            bits[index] = !islong;
         }
 
         index++;
@@ -356,7 +352,6 @@ static int memdupe_init(void) {
             if (_readtwice) {
                 data1 = load_file(_filepath, &fsize);
                 data2 = load_file(_filepath, &fsize);
-                printf("<memdupe> Read file '%s' 2 more times\n", _filepath);
             }
 
             /* 2) Write pages once... -- Sender encodes message */
@@ -374,11 +369,13 @@ static int memdupe_init(void) {
                 w2time = write_pages(&data0, pages, 2);
                 printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
 
-                ratio = (float) w2time / (float) wtime;
-                vm_stat = (ratio > (float) _ksmthresh) ? TRUE : FALSE;
+                if (_vmrole == TESTER) {
+                    ratio = (float) w2time / (float) wtime;
+                    vm_stat = (ratio > (float) _ksmthresh) ? TRUE : FALSE;
 
-                printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
-                       ratio, w2time, wtime, _ksmthresh, vm_stat);
+                    printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
+                           ratio, w2time, wtime, _ksmthresh, vm_stat);
+                }
             }
 
             if (_vmrole == TESTER) {
