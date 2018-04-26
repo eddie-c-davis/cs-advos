@@ -152,7 +152,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
             nbits = pages;
         }
     } else {
-        /* Write every page if not the SENDER */
+        /* Write every page if not the Sender */
         nbits = pages;
         bits = (char *) malloc(nbits);
         memset(bits, 1, nbits);
@@ -184,14 +184,14 @@ static ulong write_pages(char** data, ulong pages, uint step) {
             // Calculate the running mean and determine if it exceeds the KSM threshold
             tsum += tdiff;
             tmean = tsum / (index + 1);
-            islong = (tdiff > KSM_THRESHOLD * tmean);
+            islong = (tdiff > _ksmthresh * tmean);
 
             if (dowrite && _vmrole == SENDER) {
                 fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
             } else if (step > 1 && _vmrole == RECEIVER) {
                 fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
-                // If write time is long, COW means page has been deduplicated
-                bits[index] = islong;
+                // If write time is long, COW means page has been deduplicated by receier
+                bits[index] = !islong;
             }
         }
 
@@ -281,7 +281,7 @@ static char *decode_message(char *bits, ulong nbits) {
     for (i = 0; i < nbits; i += BYTEBITS) {
         val = 0;
         for (j = 0; j < BYTEBITS; j++) {
-            bit = bits[i + j];
+            bit = bits[i + j] ? 1 : 0;
             val *= 2;
             val += bit;
         }
@@ -305,8 +305,12 @@ static char *decode_message(char *bits, ulong nbits) {
  */
 static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
     munmap(data0, fsize + 1);
-    munmap(data1, fsize + 1);
-    munmap(data2, fsize + 1);
+    if (data1 != NULL) {
+        munmap(data1, fsize + 1);
+    }
+    if (data2 != NULL) {
+        munmap(data2, fsize + 1);
+    }
 }
 
 /**
@@ -315,8 +319,7 @@ static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
  * @return Virtualization status
  */
 static int memdupe_init(void) {
-    char *data0, *data1, *data2;
-    char *msg;
+    char *data0, *data1 = NULL, *data2 = NULL;
 
     uint vmx_on = FALSE;
     uint vm_stat = 0;
@@ -350,9 +353,11 @@ static int memdupe_init(void) {
             printf("<memdupe> Read file of size %ld B, %ld pages\n", fsize, pages);
 
             /* Load file 2 more times */
-            data1 = load_file(_filepath, &fsize);
-            data2 = load_file(_filepath, &fsize);
-            printf("<memdupe> Read file '%s' 2 more times\n", _filepath);
+            if (_readtwice) {
+                data1 = load_file(_filepath, &fsize);
+                data2 = load_file(_filepath, &fsize);
+                printf("<memdupe> Read file '%s' 2 more times\n", _filepath);
+            }
 
             /* 2) Write pages once... -- Sender encodes message */
             wtime = write_pages(&data0, pages, 1);
@@ -368,10 +373,10 @@ static int memdupe_init(void) {
                 printf("<memdupe> Wrote %ld pages again in %ld ns\n", pages, w2time);
 
                 ratio = (float) w2time / (float) wtime;
-                vm_stat = (ratio > (float) KSM_THRESHOLD) ? TRUE : FALSE;
+                vm_stat = (ratio > (float) _ksmthresh) ? TRUE : FALSE;
 
                 printf("<memdupe> Ratio = %g = %ld / %ld, Threshold = %d, VM_Status = %d\n",
-                       ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
+                       ratio, w2time, wtime, _ksmthresh, vm_stat);
             }
 
             if (_vmrole == TESTER) {
@@ -408,6 +413,18 @@ static void memdupe_exit(void) {
 int main(int argc, char **argv) {
     uint status;
 
+    if (argc > 5) {
+        _readtwice = atoi(argv[5]);
+    } else {
+        _readtwice = TRUE;
+    }
+
+    if (argc > 4) {
+        _ksmthresh = atoi(argv[4]);
+    } else {
+        _ksmthresh = KSM_THRESHOLD;
+    }
+
     if (argc > 3) {
         strcpy(_filepath, argv[3]);
     } else {
@@ -422,7 +439,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         if (strstr(argv[1], "-h")) {
-            printf("usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/perl\n");
+            printf("usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/vim.tiny KSM_THRESHOLD=3\n");
             _vmrole = -1;
         } else {
             _vmrole = atoi(argv[1]);

@@ -146,8 +146,12 @@ static ulong write_pages(char** data, ulong pages, uint step) {
 
 static void free_data(ulong fsize, char** data0, char **data1, char **data2) {
     kfree(*data0);
-    kfree(*data1);
-    kfree(*data2);
+    if (data1 != NULL) {
+        kfree(*data1);
+    }
+    if (data2 != NULL) {
+        kfree(*data2);
+    }
 }
 
 static char *encode_message(char *msg, ulong *nbits) {
@@ -216,7 +220,7 @@ static char *decode_message(char *bits, ulong nbits) {
 }
 
 static int __init memdupe_init(void) {
-    char *data0, *data1, *data2;
+    char *data0, *data1 = NULL, *data2 = NULL;
 
     uint vm_stat = 0;
     uint cpl_flag = 0;
@@ -230,6 +234,8 @@ static int __init memdupe_init(void) {
     _sleeptime = NUM_SECONDS;
     _vmrole = SENDER;
     strcpy(_filepath, FILEPATH);
+    _ksmthresh = KSM_THRESHOLD;
+    _readtwice = TRUE;
 
     /* Check CPL flag */
     cpl_flag = cpl_check();
@@ -249,9 +255,11 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Wrote '.' to %ld pages once in %ld ns\n", pages, wtime);
 
             /* Load file 2 more times */
-            data1 = load_file(_filepath, &fsize);
-            data2 = load_file(_filepath, &fsize);
-            printk("<memdupe> Read file '%s' 2 more times\n", _filepath);
+            if (_readtwice) {
+                data1 = load_file(_filepath, &fsize);
+                data2 = load_file(_filepath, &fsize);
+                printk("<memdupe> Read file '%s' 2 more times\n", _filepath);
+            }
 
             /* Sleep... */
             printk("<memdupe> Sleep for %d seconds\n", _sleeptime);
@@ -262,10 +270,10 @@ static int __init memdupe_init(void) {
             printk("<memdupe> Wrote '.' to %ld pages again in %ld ns\n", pages, w2time);
 
             ratio = w2time / wtime;
-            vm_stat = (ratio > KSM_THRESHOLD) ? TRUE : FALSE;
+            vm_stat = (ratio > _ksmthresh) ? TRUE : FALSE;
 
             printk("<memdupe> Ratio = %ld = %ld / %ld, Threshold = %d, VM_Status = %d\n",
-                   ratio, w2time, wtime, KSM_THRESHOLD, vm_stat);
+                   ratio, w2time, wtime, _ksmthresh, vm_stat);
 
             if (vm_stat) {
                 printk("<memdupe> Memory deduplication probably occurred\n");

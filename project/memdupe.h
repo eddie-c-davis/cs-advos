@@ -19,11 +19,11 @@
 
 #define CPUID_VMX_BIT 5
 #define FEATURE_CONTROL_MSR 0x3A
-#define FILEPATH "/usr/bin/perl"
+#define FILEPATH "/usr/bin/vim.tiny"
 
 #define NUM_READS     2
 #define NUM_SECONDS   5
-#define KSM_THRESHOLD 2
+#define KSM_THRESHOLD 3
 
 #define CPL_KERN 0
 #define CPL_USER 3
@@ -44,6 +44,8 @@ typedef unsigned long ulong;
 static char _filepath[1024];
 static int _vmrole;
 static int _sleeptime;
+static int _ksmthresh;
+static int _readtwice;
 
 static int virt_test(void);
 static int cpl_check(void);
