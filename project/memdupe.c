@@ -360,8 +360,10 @@ static int memdupe_init(void) {
             }
 
             /* 2) Write pages once... -- Sender encodes message */
-            wtime = write_pages(&data0, pages, 1);
-            printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
+            if (_vmrole != RECEIVER) {
+                wtime = write_pages(&data0, pages, 1);
+                printf("<memdupe> Wrote %ld pages once in %ld ns\n", pages, wtime);
+            }
 
             /* 3) Sleep and wait for KSM to work -- Sender / Receiver*/
             printf("<memdupe> Sleep for %d seconds\n", _sleeptime);
