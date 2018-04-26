@@ -117,7 +117,6 @@ static char *load_file(const char *path, ulong *fsize) {
 
 static ulong write_pages(char** data, ulong pages, uint step) {
     char *buffer;
-    char *msg = MESSAGE;
 
     ulong index = 0;
     ulong time1 = 0;
@@ -125,7 +124,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
 
     buffer = (char *) kmalloc(sizeof(char) * pages, GFP_ATOMIC);
     memset(buffer, '.', sizeof(char) * pages);
-    strcpy(buffer, msg);
+    strcpy(buffer, _message);
 
     /* Start timer for writing pages... */
     time1 = get_clock_time();
@@ -234,6 +233,7 @@ static int __init memdupe_init(void) {
     _sleeptime = NUM_SECONDS;
     _vmrole = SENDER;
     strcpy(_filepath, FILEPATH);
+    strcpy(_message, MESSAGE);
     _ksmthresh = KSM_THRESHOLD;
     _readtwice = TRUE;
 

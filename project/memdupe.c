@@ -147,7 +147,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
 
     if (_vmrole == SENDER) {
         /* Encode the message bytes => bits if the Sender */
-        bits = encode_message(MESSAGE, &nbits);
+        bits = encode_message(_message, &nbits);
         if (nbits > pages) {
             nbits = pages;
         }
@@ -413,10 +413,16 @@ static void memdupe_exit(void) {
 int main(int argc, char **argv) {
     uint status;
 
-    if (argc > 5) {
-        _readtwice = atoi(argv[5]);
+    if (argc > 6) {
+        _readtwice = atoi(argv[6]);
     } else {
         _readtwice = TRUE;
+    }
+
+    if (argc > 5) {
+        strcpy(_message, argv[5]);
+    } else {
+        strcpy(_message, MESSAGE);
     }
 
     if (argc > 4) {
@@ -439,7 +445,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         if (strstr(argv[1], "-h")) {
-            printf("usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/vim.tiny KSM_THRESHOLD=3\n");
+            printf("usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/vim.tiny KSM_THRESHOLD=3 MESSAGE=\"Hello!\"\n");
             _vmrole = -1;
         } else {
             _vmrole = atoi(argv[1]);

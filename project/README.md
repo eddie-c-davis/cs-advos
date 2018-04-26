@@ -19,7 +19,7 @@ gcc memdupe.c -g -o memdupe -Wunused-function
 
 ```
 $ ./memdupe -h
-usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/vim.tiny KSM_THRESHOLD=3
+usage: memdupe ROLE[0=TESTER|1=SENDER|2=RECEIVER] SLEEPTIME=5 FILEPATH=/usr/bin/vim.tiny KSM_THRESHOLD=3 MESSAGE="Hello!"
 ```
 
 3. To load the kernel module, use the following command.
