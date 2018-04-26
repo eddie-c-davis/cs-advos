@@ -290,7 +290,7 @@ static char *decode_message(char *bits, ulong nbits) {
     }
 
     msg[index] = '\0';
-    printf("<memdupe> Decoded message: '%s\'n", msg);
+    printf("<memdupe> Decoded message: '%s'\n", msg);
 
     return msg;
 }
