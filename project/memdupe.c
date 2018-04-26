@@ -161,7 +161,7 @@ static ulong write_pages(char** data, ulong pages, uint step) {
     /* Start timer for writing pages... */
     tinit = get_clock_time();
 
-    if (step == 1) {
+    if (DEBUG && step == 1) {
         fprintf(stderr, "Op,Page,Time,Long?\n");
     }
 
@@ -183,12 +183,14 @@ static ulong write_pages(char** data, ulong pages, uint step) {
         tmean = tsum / (index + 1);
         islong = (tdiff > _ksmthresh * tmean);
 
-        if (dowrite && _vmrole == SENDER) {
+        if (dowrite && _vmrole == SENDER && DEBUG) {
             fprintf(stderr, "W,%ld,%ld,%d\n", index, tdiff, islong);
         } else if (step > 1) {
-            fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
+            if (DEBUG) fprintf(stderr, "R,%ld,%ld,%d\n", index, tdiff, islong);
             // If write time is long, COW means page has been deduplicated by receier
             bits[index] = !islong;
+        } else if (DEBUG) {
+            fprintf(stderr, "T,%ld,%ld\n", index, tdiff);
         }
 
         index++;

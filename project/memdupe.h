@@ -13,6 +13,7 @@
 #define FALSE 0
 #endif
 
+#define DEBUG        1
 #define BILLION      1000000000
 #define BUFFER_SIZE  4096
 #define MY_PAGE_SIZE 4096
