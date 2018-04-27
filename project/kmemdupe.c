@@ -49,7 +49,6 @@ static int virt_test(void) {
         if(msr3a_value&1){
             if((msr3a_value>>2)&1){
                 vmx_on = TRUE;
-            } else {
             }
         }
     }
